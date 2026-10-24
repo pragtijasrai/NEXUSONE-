@@ -1,0 +1,4 @@
+{"name":"nexusone","private":true,"scripts":{
+"dev:frontend":"npm --prefix frontend run dev","dev:backend":"npm --prefix backend run dev",
+"dev":"npx concurrently -n web,api \"npm run dev:frontend\" \"npm run dev:backend\"",
+"install:all":"npm --prefix frontend install && npm --prefix backend install","build":"npm --prefix frontend run build"}}
