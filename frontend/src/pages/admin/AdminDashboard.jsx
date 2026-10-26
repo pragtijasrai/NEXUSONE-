@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Users, DoorOpen, Wrench, CalendarDays, TrendingUp, TrendingDown, Shield } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts';
 import { useAuth } from '../../context/AuthContext.jsx';
