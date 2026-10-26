@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CalendarClock, DoorOpen, Wrench, PackageSearch,
   CalendarDays, Bus, Bot, Megaphone, Users, BookOpen, BarChart3,
-  Settings, FileText, Shield, MapPin,
+  Settings, FileText, Shield, MapPin, CalendarCheck, GraduationCap,
 } from 'lucide-react';
 
 export const navByRole = {
@@ -26,14 +26,15 @@ export const navByRole = {
     { to: '/faculty/rooms',        label: 'Room Booking', icon: DoorOpen        },
   ],
   admin: [
-    { to: '/admin/dashboard',      label: 'Dashboard',    icon: LayoutDashboard },
-    { to: '/admin/users',          label: 'User Management',icon: Users         },
-    { to: '/admin/rooms',          label: 'Rooms',        icon: DoorOpen        },
-    { to: '/admin/events',         label: 'Events',       icon: CalendarDays    },
-    { to: '/admin/announcements',  label: 'Announcements',icon: Megaphone       },
-    { to: '/admin/maintenance',    label: 'Maintenance',  icon: Wrench          },
-    { to: '/admin/reports',        label: 'Analytics',    icon: BarChart3       },
-    { to: '/admin/settings',       label: 'Settings',     icon: Settings        },
+    { to: '/admin/dashboard',      label: 'Dashboard',      icon: LayoutDashboard },
+    { to: '/admin/users',          label: 'Users',          icon: Users           },
+    { to: '/admin/courses',        label: 'Courses',        icon: BookOpen        },
+    { to: '/admin/rooms',          label: 'Rooms',          icon: DoorOpen        },
+    { to: '/admin/sessions',       label: 'Class Sessions', icon: CalendarCheck   },
+    { to: '/admin/attendance',     label: 'Attendance',     icon: GraduationCap   },
+    { to: '/admin/bookings',       label: 'Bookings',       icon: CalendarDays    },
+    { to: '/admin/reports',        label: 'Reports',        icon: BarChart3       },
+    { to: '/admin/settings',       label: 'Settings',       icon: Settings        },
   ],
   maintenance: [
     { to: '/maintenance/dashboard',label: 'Dashboard',    icon: LayoutDashboard },
