@@ -30,8 +30,10 @@ const roleConfig = {
   maintenance: { icon: Wrench,        color: '#f59e0b', grad: 'linear-gradient(135deg,#f59e0b,#fbbf24)' },
 };
 
+import { USE_MOCK } from '../../services/apiClient.js';
+
 export default function Login() {
-  const { user, signIn, signInAs } = useAuth();
+  const { user, signIn, signInAs, signInRemote } = useAuth();
   const { notify } = useToast();
   const navigate = useNavigate();
 
@@ -72,7 +74,7 @@ export default function Login() {
     setErrors({});
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     const next = {};
     if (!/^\S+@\S+\.\S+$/.test(form.email)) next.email = 'Enter a valid email address.';
@@ -80,12 +82,15 @@ export default function Login() {
     setErrors(next);
     if (Object.keys(next).length) return;
     setBusy(true);
-    setTimeout(() => {
-      setBusy(false);
-      const r = signIn(form.email, form.password);
-      if (r.ok && !builtRoles.includes(r.user.role)) notify("This role's portal is coming soon!", 'info');
-      finish(r);
-    }, 500);
+
+    /* Use real backend when VITE_USE_MOCK=false, otherwise use mock */
+    const r = USE_MOCK
+      ? signIn(form.email, form.password)
+      : await signInRemote(form.email, form.password);
+
+    setBusy(false);
+    if (r.ok && !builtRoles.includes(r.user.role)) notify("This role's portal is coming soon!", 'info');
+    finish(r);
   };
 
   const cfg = roleConfig[activeRole];

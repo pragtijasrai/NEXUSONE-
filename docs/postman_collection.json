@@ -1,0 +1,447 @@
+{
+  "info": {
+    "name": "NexusOne API",
+    "description": "Complete API collection for NexusOne campus management platform.\n\nSetup:\n1. Set the `base_url` variable to your backend URL (default: http://localhost:4000/api/v1)\n2. Run 'Login' to get tokens — they are saved to collection variables automatically\n3. All protected requests use {{access_token}} automatically\n\nDemo credentials:\n  student    → alex.morgan@northbridge.edu / demo1234\n  faculty    → priya.raman@northbridge.edu / demo1234\n  admin      → jordan.ellis@northbridge.edu / demo1234\n  maintenance → sam.okafor@northbridge.edu  / demo1234",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",      "value": "http://localhost:4000/api/v1", "type": "string" },
+    { "key": "access_token",  "value": "", "type": "string" },
+    { "key": "refresh_token", "value": "", "type": "string" }
+  ],
+  "item": [
+
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health",
+            "description": "Returns server status and database connectivity. No auth required. Always 200."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register (Student)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Student\",\n  \"email\": \"newstudent@northbridge.edu\",\n  \"password\": \"demo1234\",\n  \"role\": \"student\"\n}"
+            },
+            "description": "Creates a student account. Roles 'admin' and 'maintenance' are rejected — returns 400.\nReturns: accessToken + refreshToken."
+          }
+        },
+        {
+          "name": "Register (Faculty)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dr. New Faculty\",\n  \"email\": \"newfaculty@northbridge.edu\",\n  \"password\": \"demo1234\",\n  \"role\": \"faculty\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Register (Admin — should fail 400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hacker\",\n  \"email\": \"hacker@northbridge.edu\",\n  \"password\": \"demo1234\",\n  \"role\": \"admin\"\n}"
+            },
+            "description": "Expected: 400. Admin role is blocked at schema validation."
+          }
+        },
+        {
+          "name": "Login (Student)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.success) {",
+                  "  pm.collectionVariables.set('access_token', body.data.accessToken);",
+                  "  pm.collectionVariables.set('refresh_token', body.data.refreshToken);",
+                  "  console.log('Tokens saved to collection variables');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex.morgan@northbridge.edu\",\n  \"password\": \"demo1234\"\n}"
+            },
+            "description": "Login as student. Tokens are auto-saved to collection variables."
+          }
+        },
+        {
+          "name": "Login (Faculty)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.success) {",
+                  "  pm.collectionVariables.set('access_token', body.data.accessToken);",
+                  "  pm.collectionVariables.set('refresh_token', body.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"priya.raman@northbridge.edu\",\n  \"password\": \"demo1234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.success) {",
+                  "  pm.collectionVariables.set('access_token', body.data.accessToken);",
+                  "  pm.collectionVariables.set('refresh_token', body.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jordan.ellis@northbridge.edu\",\n  \"password\": \"demo1234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login (Wrong Password — 401)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex.morgan@northbridge.edu\",\n  \"password\": \"wrongpassword\"\n}"
+            },
+            "description": "Expected: 401 BAD_CREDENTIALS"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.success) {",
+                  "  pm.collectionVariables.set('access_token', body.data.accessToken);",
+                  "  pm.collectionVariables.set('refresh_token', body.data.refreshToken);",
+                  "  console.log('Tokens rotated');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/refresh",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "description": "Exchange refresh token for new access + refresh tokens. Old refresh token is revoked."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/logout",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "description": "Revokes the refresh token. Returns 200 even without a token."
+          }
+        },
+        {
+          "name": "Get Current User (me)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/auth/me",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Returns the user from the JWT payload. Requires valid access token."
+          }
+        },
+        {
+          "name": "Get Current User — No Token (401)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/auth/me",
+            "description": "Expected: 401 UNAUTHENTICATED"
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/auth/me",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alex M. Morgan\",\n  \"phone\": \"+91-9876543210\"\n}"
+            },
+            "description": "Update name and/or phone. Fields 'role', 'password', etc. are rejected (strict schema)."
+          }
+        },
+        {
+          "name": "Update Profile — Inject Role (400)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/auth/me",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}"
+            },
+            "description": "Expected: 400. Strict Zod schema rejects unknown fields."
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/auth/me/password",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"demo1234\",\n  \"newPassword\": \"newpassword123\"\n}"
+            },
+            "description": "Requires current password. Invalidates all refresh tokens on success."
+          }
+        },
+        {
+          "name": "Change Password — Wrong Current (401)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/auth/me/password",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"wrongpassword\",\n  \"newPassword\": \"newpassword123\"\n}"
+            },
+            "description": "Expected: 401 BAD_CREDENTIALS"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "Users (Admin only)",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/users?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "page",    "value": "1" },
+                { "key": "limit",   "value": "20" },
+                { "key": "role",    "value": "student", "disabled": true },
+                { "key": "status",  "value": "active",  "disabled": true },
+                { "key": "search",  "value": "alex",    "disabled": true },
+                { "key": "sortBy",  "value": "created_at", "disabled": true },
+                { "key": "sortDir", "value": "DESC",    "disabled": true }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Admin only. Paginated. Filter by role, status, search. Max limit 100."
+          }
+        },
+        {
+          "name": "List Users — Student Token (403)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/users",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Expected: 403 FORBIDDEN if logged in as student/faculty/maintenance"
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/users/1",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Admin only. Replace 1 with actual user ID."
+          }
+        },
+        {
+          "name": "Update User Status",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/users/1",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"inactive\"\n}"
+            },
+            "description": "Admin only. Valid statuses: active, inactive, suspended."
+          }
+        },
+        {
+          "name": "Promote to Admin",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/users/1",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}"
+            },
+            "description": "Only admins can assign privileged roles. This is how maintenance and admin accounts are created."
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/users/1",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Admin only. Returns 204 on success. Cannot delete yourself."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "Rooms & Bookings",
+      "item": [
+        {
+          "name": "List Rooms (501 — planned)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/rooms",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Returns 501. Will be implemented in Phase 5."
+          }
+        },
+        {
+          "name": "List Bookings (501 — planned)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/bookings",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "Events & Announcements",
+      "item": [
+        {
+          "name": "List Events (501 — planned)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/events",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "List Announcements (501 — planned)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/announcements",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "Maintenance Tickets",
+      "item": [
+        {
+          "name": "List Tickets (501 — planned)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/maintenance",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List Notifications (501 — planned)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notifications",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        }
+      ]
+    }
+  ]
+}
