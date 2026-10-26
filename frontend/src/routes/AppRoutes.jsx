@@ -14,6 +14,7 @@ import RoomBooking      from '../pages/student/RoomBooking.jsx';
 import CampusEvents     from '../pages/student/CampusEvents.jsx';
 import AIAssistant      from '../pages/student/AIAssistant.jsx';
 import CampusMap        from '../pages/student/CampusMap.jsx';
+import MyClasses from '../pages/student/MyClasses.jsx';
 
 // Faculty
 import FacultyDashboard from '../pages/faculty/FacultyDashboard.jsx';
@@ -48,7 +49,7 @@ export default function AppRoutes() {
           <Route path="events"       element={<CampusEvents />} />
           <Route path="assistant"    element={<AIAssistant />} />
           <Route path="transport"    element={<CampusMap />} />
-          <Route path="schedule"     element={<ComingSoon />} />
+          <Route path="schedule" element={<MyClasses />} />
           <Route path="maintenance"  element={<ComingSoon />} />
           <Route path="lost-found"   element={<ComingSoon />} />
           <Route path="announcements" element={<ComingSoon />} />
