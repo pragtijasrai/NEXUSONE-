@@ -20,6 +20,14 @@ import FacultyDashboard from '../pages/faculty/FacultyDashboard.jsx';
 
 // Admin
 import AdminDashboard   from '../pages/admin/AdminDashboard.jsx';
+import AdminUsers       from '../pages/admin/AdminUsers.jsx';
+import AdminCourses     from '../pages/admin/AdminCourses.jsx';
+import AdminRooms       from '../pages/admin/AdminRooms.jsx';
+import AdminSessions    from '../pages/admin/AdminSessions.jsx';
+import AdminAttendance  from '../pages/admin/AdminAttendance.jsx';
+import AdminBookings    from '../pages/admin/AdminBookings.jsx';
+import AdminReports     from '../pages/admin/AdminReports.jsx';
+import AdminSettings    from '../pages/admin/AdminSettings.jsx';
 
 // Maintenance
 import MaintenanceDashboard from '../pages/maintenance/MaintenanceDashboard.jsx';
@@ -66,13 +74,17 @@ export default function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard"    element={<AdminDashboard />} />
-          <Route path="users"        element={<ComingSoon />} />
-          <Route path="rooms"        element={<RoomBooking />} />
+          <Route path="users"        element={<AdminUsers />} />
+          <Route path="courses"      element={<AdminCourses />} />
+          <Route path="rooms"        element={<AdminRooms />} />
+          <Route path="sessions"     element={<AdminSessions />} />
+          <Route path="attendance"   element={<AdminAttendance />} />
+          <Route path="bookings"     element={<AdminBookings />} />
           <Route path="events"       element={<CampusEvents />} />
           <Route path="announcements" element={<ComingSoon />} />
           <Route path="maintenance"  element={<ComingSoon />} />
-          <Route path="reports"      element={<ComingSoon />} />
-          <Route path="settings"     element={<ComingSoon />} />
+          <Route path="reports"      element={<AdminReports />} />
+          <Route path="settings"     element={<AdminSettings />} />
         </Route>
       </Route>
 
