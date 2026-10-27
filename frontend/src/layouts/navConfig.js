@@ -37,8 +37,10 @@ export const navByRole = {
     { to: '/admin/settings',       label: 'Settings',       icon: Settings        },
   ],
   maintenance: [
-    { to: '/maintenance/dashboard',label: 'Dashboard',    icon: LayoutDashboard },
-    { to: '/maintenance/tickets',  label: 'Tickets',      icon: Wrench          },
-    { to: '/maintenance/schedule', label: 'Schedule',     icon: CalendarClock   },
+    { to: '/maintenance/dashboard', label: 'Dashboard',   icon: LayoutDashboard },
+    { to: '/maintenance/tickets',   label: 'Maintenance', icon: Wrench          },
+    { to: '/maintenance/schedule',  label: 'Schedule',    icon: CalendarClock   },
+    { to: '/maintenance/reports',   label: 'Reports',     icon: BarChart3       },
+    { to: '/maintenance/settings',  label: 'Settings',    icon: Settings        },
   ],
 };
