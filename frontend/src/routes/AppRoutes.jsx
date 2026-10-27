@@ -5,6 +5,7 @@ import DashboardLayout  from '../layouts/DashboardLayout.jsx';
 // Public
 import Landing          from '../pages/public/Landing.jsx';
 import Login            from '../pages/public/Login.jsx';
+import Register         from '../pages/public/Register.jsx';
 import NotFound         from '../pages/NotFound.jsx';
 import ComingSoon       from '../pages/ComingSoon.jsx';
 
@@ -37,8 +38,9 @@ export default function AppRoutes() {
   return (
     <Routes>
       {/* Public */}
-      <Route path="/"      element={<Landing />} />
-      <Route path="/login" element={<Login />} />
+      <Route path="/"         element={<Landing />} />
+      <Route path="/login"    element={<Login />} />
+      <Route path="/register" element={<Register />} />
 
       {/* Student portal */}
       <Route path="/student" element={<ProtectedRoute role="student" />}>

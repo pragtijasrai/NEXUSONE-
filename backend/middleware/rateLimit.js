@@ -16,7 +16,7 @@ import rateLimit from 'express-rate-limit';
 /* Strict limiter for auth endpoints: 5 requests per 15 minutes per IP */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'test' ? 1000 : 5,
+  max: process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development' ? 1000 : 5,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

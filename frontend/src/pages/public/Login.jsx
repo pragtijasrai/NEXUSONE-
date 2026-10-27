@@ -3,13 +3,15 @@ import { Navigate, useNavigate, Link } from 'react-router-dom';
 import {
   Eye, EyeOff, GraduationCap, BookOpen,
   ShieldCheck, Wrench, ArrowRight, ChevronLeft, ChevronRight,
+  Mail, Lock,
 } from 'lucide-react';
 import Logo from '../../components/common/Logo.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
-import { roleHome, builtRoles, roleLabels, DEMO_PASSWORD, mockUsers } from '../../data/mockUsers.js';
+import { roleHome, roleLabels } from '../../data/mockUsers.js';
 
-/* ─── Chitkara University campus photos (local, in /public) ─── */
+const DOMAIN = 'chitkara.edu.in';
+
 const slides = [
   {
     src: '/cu-campus.jpg',
@@ -19,7 +21,7 @@ const slides = [
   {
     src: '/cu-turing.jpg',
     caption: 'Turing Block — Computer Science Hub',
-    sub: 'State-of-the-art labs powering tomorrow\'s innovators',
+    sub: "State-of-the-art labs powering tomorrow's innovators",
   },
 ];
 
@@ -30,67 +32,63 @@ const roleConfig = {
   maintenance: { icon: Wrench,        color: '#f59e0b', grad: 'linear-gradient(135deg,#f59e0b,#fbbf24)' },
 };
 
-import { USE_MOCK } from '../../services/apiClient.js';
-
 export default function Login() {
-  const { user, signIn, signInAs, signInRemote } = useAuth();
+  const { user, signInRemote, loading } = useAuth();
   const { notify } = useToast();
   const navigate = useNavigate();
 
-  const [slide, setSlide] = useState(0);
+  const [slide, setSlide]       = useState(0);
   const [animating, setAnimating] = useState(false);
   const [activeRole, setActiveRole] = useState('student');
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [errors, setErrors] = useState({});
-  const [show, setShow] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [form, setForm]         = useState({ email: '', password: '' });
+  const [errors, setErrors]     = useState({});
+  const [show, setShow]         = useState(false);
+  const [busy, setBusy]         = useState(false);
 
-  /* Auto-advance slideshow every 5 s */
+  /* Auto-advance slideshow */
   useEffect(() => {
-    const t = setInterval(() => changeSlide((slide + 1) % slides.length), 5000);
+    const t = setInterval(() => changeSlide((s) => (s + 1) % slides.length), 5000);
     return () => clearInterval(t);
-  }, [slide]);
-
-  if (user) return <Navigate to={roleHome[user.role]} replace />;
+  }, []);
 
   const changeSlide = (idx) => {
     if (animating) return;
     setAnimating(true);
-    setTimeout(() => { setSlide(idx); setAnimating(false); }, 350);
+    const next = typeof idx === 'function' ? idx(slide) : idx;
+    setTimeout(() => { setSlide(next); setAnimating(false); }, 350);
   };
 
-  const finish = (r) => {
+  if (!loading && user) return <Navigate to={roleHome[user.role]} replace />;
+
+  const validate = () => {
+    const e = {};
+    const email = form.email.trim().toLowerCase();
+    if (!email) {
+      e.email = 'Email is required.';
+    } else if (!email.endsWith(`@${DOMAIN}`)) {
+      e.email = `Only @${DOMAIN} email addresses are allowed.`;
+    }
+    if (!form.password) e.password = 'Password is required.';
+    return e;
+  };
+
+  const submit = async (ev) => {
+    ev.preventDefault();
+    const errs = validate();
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+
+    setBusy(true);
+    const r = await signInRemote(form.email.trim().toLowerCase(), form.password);
+    setBusy(false);
+
     if (r.ok) {
       notify(`Welcome back, ${r.user.name}! 👋`, 'success');
       navigate(roleHome[r.user.role]);
     } else {
-      notify(r.error, 'error');
+      notify(r.error || 'Login failed', 'error');
+      setErrors({ password: r.error || 'Invalid credentials' });
     }
-  };
-
-  const fillDemo = (role) => {
-    const u = mockUsers.find(u => u.role === role);
-    if (u) setForm({ email: u.email, password: DEMO_PASSWORD });
-    setErrors({});
-  };
-
-  const submit = async (e) => {
-    e.preventDefault();
-    const next = {};
-    if (!/^\S+@\S+\.\S+$/.test(form.email)) next.email = 'Enter a valid email address.';
-    if (!form.password) next.password = 'Enter your password.';
-    setErrors(next);
-    if (Object.keys(next).length) return;
-    setBusy(true);
-
-    /* Use real backend when VITE_USE_MOCK=false, otherwise use mock */
-    const r = USE_MOCK
-      ? signIn(form.email, form.password)
-      : await signInRemote(form.email, form.password);
-
-    setBusy(false);
-    if (r.ok && !builtRoles.includes(r.user.role)) notify("This role's portal is coming soon!", 'info');
-    finish(r);
   };
 
   const cfg = roleConfig[activeRole];
@@ -98,9 +96,7 @@ export default function Login() {
   return (
     <div style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
 
-      {/* ══════════════════════════════════
-          LEFT — Login form
-      ══════════════════════════════════ */}
+      {/* ── LEFT: Form ── */}
       <div style={{
         background: 'var(--surface)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -108,63 +104,62 @@ export default function Login() {
       }}>
         <div style={{ width: '100%', maxWidth: 400 }}>
 
-          {/* Logo */}
-          <div style={{ marginBottom: 32 }}>
-            <Logo showTagline />
-          </div>
+          <div style={{ marginBottom: 32 }}><Logo showTagline /></div>
 
-          {/* Heading */}
           <h1 style={{ fontSize: '1.75rem', marginBottom: 4, fontWeight: 800 }}>Welcome Back</h1>
-          <p className="muted" style={{ marginBottom: 28, fontSize: '.9rem' }}>Login to your account to continue</p>
+          <p className="muted" style={{ marginBottom: 28, fontSize: '.9rem' }}>
+            Sign in with your <strong>@{DOMAIN}</strong> account
+          </p>
 
-          {/* Email */}
-          <label className="field">
-            Email or ID
-            <input
-              type="email"
-              value={form.email}
-              aria-invalid={!!errors.email}
-              placeholder="student@nexusone.edu"
-              onChange={e => setForm({ ...form, email: e.target.value })}
-            />
-            {errors.email && <span className="field__error">{errors.email}</span>}
-          </label>
-
-          {/* Password */}
-          <label className="field">
-            Password
-            <span className="field__pw">
+          <form onSubmit={submit} noValidate>
+            {/* Email */}
+            <label className="field">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Mail size={13} /> University Email</span>
               <input
-                type={show ? 'text' : 'password'}
-                value={form.password}
-                aria-invalid={!!errors.password}
-                placeholder="••••••••••"
-                onChange={e => setForm({ ...form, password: e.target.value })}
+                type="email"
+                value={form.email}
+                aria-invalid={!!errors.email}
+                placeholder={`yourname@${DOMAIN}`}
+                autoComplete="email"
+                onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setErrors(x => ({ ...x, email: '' })); }}
               />
-              <button type="button" className="icon-btn" onClick={() => setShow(s => !s)}
-                aria-label={show ? 'Hide' : 'Show'}>
-                {show ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </span>
-            {errors.password && <span className="field__error">{errors.password}</span>}
-          </label>
+              {errors.email && <span className="field__error">{errors.email}</span>}
+            </label>
 
-          {/* Forgot */}
-          <div style={{ textAlign: 'right', marginTop: -8, marginBottom: 20 }}>
-            <a href="#" style={{ fontSize: '.82rem', color: 'var(--primary)', textDecoration: 'none' }}>
-              Forgot Password?
-            </a>
-          </div>
+            {/* Password */}
+            <label className="field">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Lock size={13} /> Password</span>
+              <span className="field__pw">
+                <input
+                  type={show ? 'text' : 'password'}
+                  value={form.password}
+                  aria-invalid={!!errors.password}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setErrors(x => ({ ...x, password: '' })); }}
+                />
+                <button type="button" className="icon-btn" onClick={() => setShow(s => !s)} aria-label={show ? 'Hide password' : 'Show password'}>
+                  {show ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </span>
+              {errors.password && <span className="field__error">{errors.password}</span>}
+            </label>
 
-          {/* Login button */}
-          <button
-            className="btn btn--primary btn--block"
-            style={{ background: cfg.grad, border: 0, minHeight: 46, fontSize: '1rem' }}
-            disabled={busy}
-            onClick={submit}
-          >
-            {busy ? 'Signing in…' : 'Login'} {!busy && <ArrowRight size={16} />}
-          </button>
+            <div style={{ textAlign: 'right', marginTop: -8, marginBottom: 20 }}>
+              <span style={{ fontSize: '.82rem', color: 'var(--muted)' }}>
+                Forgot password? Contact your IT administrator.
+              </span>
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn--primary btn--block"
+              style={{ background: cfg.grad, border: 0, minHeight: 46, fontSize: '1rem' }}
+              disabled={busy}
+            >
+              {busy ? 'Signing in…' : 'Sign In'} {!busy && <ArrowRight size={16} />}
+            </button>
+          </form>
 
           {/* Divider */}
           <div style={{ position: 'relative', textAlign: 'center', margin: '22px 0' }}>
@@ -174,46 +169,37 @@ export default function Login() {
               transform: 'translate(-50%,-50%)',
               background: 'var(--surface)', padding: '0 14px',
               fontSize: '.78rem', color: 'var(--muted)',
-            }}>
-              or continue with
-            </span>
+            }}>Select your role</span>
           </div>
 
-          {/* Role quick-access chips — the 2 photos the user wants shown here */}
+          {/* Role chips — visual only, highlight active role */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 26 }}>
             {Object.entries(roleConfig).map(([role, rc]) => {
               const Icon = rc.icon;
-              const ready = builtRoles.includes(role);
               const active = activeRole === role;
               return (
                 <button
                   key={role}
+                  type="button"
                   onClick={() => {
                     setActiveRole(role);
-                    if (ready) {
-                      fillDemo(role);
-                      finish(signInAs(role));
-                    } else {
-                      notify("This role's portal is coming soon!", 'info');
-                    }
+                    setForm(f => ({ ...f, email: `${role}@${DOMAIN}` }));
+                    setErrors({});
                   }}
-                  title={!ready ? 'Coming soon' : `Enter as ${roleLabels[role]}`}
+                  title={`Sign in as ${roleLabels[role]}`}
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
                     padding: '12px 6px', borderRadius: 14,
                     border: active ? `2.5px solid ${rc.color}` : '2px solid var(--border)',
                     background: active ? `${rc.color}10` : 'var(--bg)',
-                    cursor: 'pointer', font: 'inherit',
-                    opacity: ready ? 1 : .5,
-                    transition: 'all 180ms',
+                    cursor: 'pointer', font: 'inherit', transition: 'all 180ms',
                   }}
                 >
                   <div style={{
                     width: 36, height: 36, borderRadius: 11,
                     background: active ? rc.grad : 'var(--surface)',
                     border: active ? 'none' : `1.5px solid ${rc.color}40`,
-                    display: 'grid', placeItems: 'center',
-                    transition: 'all 180ms',
+                    display: 'grid', placeItems: 'center', transition: 'all 180ms',
                   }}>
                     <Icon size={17} color={active ? '#fff' : rc.color} aria-hidden="true" />
                   </div>
@@ -225,12 +211,11 @@ export default function Login() {
             })}
           </div>
 
-          {/* Sign up */}
           <p style={{ textAlign: 'center', fontSize: '.83rem', color: 'var(--muted)', margin: '0 0 12px' }}>
-            Don't have an account?{' '}
-            <a href="#" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 600 }}>
-              Sign up
-            </a>
+            New to NexusOne?{' '}
+            <Link to="/register" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 600 }}>
+              Create account
+            </Link>
           </p>
           <div style={{ textAlign: 'center' }}>
             <Link to="/" style={{ fontSize: '.8rem', color: 'var(--muted)', textDecoration: 'none' }}>
@@ -238,160 +223,69 @@ export default function Login() {
             </Link>
           </div>
 
-          {/* Demo hint */}
+          {/* Domain notice */}
           <div style={{
             marginTop: 20, padding: '10px 14px', borderRadius: 10,
             background: 'rgba(37,99,235,.07)', border: '1px solid rgba(37,99,235,.18)',
             fontSize: '.75rem', color: 'var(--info)', lineHeight: 1.6,
           }}>
-            <strong>Demo:</strong> Click a role chip above to auto-login.
-            Manual password: <code style={{ fontFamily: 'monospace', fontWeight: 700 }}>demo1234</code>
+            🔒 Only <strong>@{DOMAIN}</strong> email addresses are accepted.
+            Use your official Chitkara University credentials.
           </div>
         </div>
       </div>
 
-      {/* ══════════════════════════════════
-          RIGHT — Chitkara University photo slideshow
-      ══════════════════════════════════ */}
+      {/* ── RIGHT: Slideshow ── */}
       <div style={{ position: 'relative', overflow: 'hidden', background: '#0b0f1e' }}>
-
-        {/* Photo */}
         <div style={{
           position: 'absolute', inset: 0,
           backgroundImage: `url('${slides[slide].src}')`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
+          backgroundSize: 'cover', backgroundPosition: 'center',
           transition: animating ? 'opacity 350ms ease' : 'none',
           opacity: animating ? 0 : 1,
         }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top,rgba(10,12,26,.92) 0%,rgba(10,12,26,.55) 40%,rgba(10,12,26,.25) 70%,rgba(10,12,26,.4) 100%)' }} />
+        <div style={{ position: 'absolute', top: 28, left: 28, zIndex: 2 }}><Logo size={30} /></div>
 
-        {/* Gradient overlay */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: `
-            linear-gradient(to top,
-              rgba(10,12,26,.92) 0%,
-              rgba(10,12,26,.55) 40%,
-              rgba(10,12,26,.25) 70%,
-              rgba(10,12,26,.4) 100%)
-          `,
-        }} />
-
-        {/* Top‑left logo watermark */}
-        <div style={{ position: 'absolute', top: 28, left: 28, zIndex: 2 }}>
-          <Logo size={30} />
-        </div>
-
-        {/* Nav arrows */}
-        <button
-          onClick={() => changeSlide((slide - 1 + slides.length) % slides.length)}
-          aria-label="Previous photo"
-          style={{
-            position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
-            zIndex: 2, width: 38, height: 38, borderRadius: '50%',
-            background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,255,255,.25)', color: '#fff',
-            display: 'grid', placeItems: 'center', cursor: 'pointer',
-          }}
-        >
+        <button onClick={() => changeSlide((slide - 1 + slides.length) % slides.length)} aria-label="Previous" style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', zIndex:2, width:38, height:38, borderRadius:'50%', background:'rgba(255,255,255,.18)', backdropFilter:'blur(8px)', border:'1px solid rgba(255,255,255,.25)', color:'#fff', display:'grid', placeItems:'center', cursor:'pointer' }}>
           <ChevronLeft size={20} />
         </button>
-        <button
-          onClick={() => changeSlide((slide + 1) % slides.length)}
-          aria-label="Next photo"
-          style={{
-            position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
-            zIndex: 2, width: 38, height: 38, borderRadius: '50%',
-            background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,255,255,.25)', color: '#fff',
-            display: 'grid', placeItems: 'center', cursor: 'pointer',
-          }}
-        >
+        <button onClick={() => changeSlide((slide + 1) % slides.length)} aria-label="Next" style={{ position:'absolute', right:16, top:'50%', transform:'translateY(-50%)', zIndex:2, width:38, height:38, borderRadius:'50%', background:'rgba(255,255,255,.18)', backdropFilter:'blur(8px)', border:'1px solid rgba(255,255,255,.25)', color:'#fff', display:'grid', placeItems:'center', cursor:'pointer' }}>
           <ChevronRight size={20} />
         </button>
 
-        {/* Bottom content */}
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          zIndex: 2, padding: '36px 36px 40px',
-        }}>
-          {/* Frosted card */}
-          <div style={{
-            background: 'rgba(10,12,26,.6)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255,255,255,.12)',
-            borderRadius: 18, padding: '24px 28px',
-            marginBottom: 18,
-          }}>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: 'rgba(67,56,202,.35)', border: '1px solid rgba(99,102,241,.4)',
-              borderRadius: 99, padding: '4px 14px', marginBottom: 12,
-              fontSize: '.72rem', fontWeight: 700, color: '#a5b4fc',
-              textTransform: 'uppercase', letterSpacing: '.07em',
-            }}>
+        <div style={{ position:'absolute', bottom:0, left:0, right:0, zIndex:2, padding:'36px 36px 40px' }}>
+          <div style={{ background:'rgba(10,12,26,.6)', backdropFilter:'blur(20px)', border:'1px solid rgba(255,255,255,.12)', borderRadius:18, padding:'24px 28px', marginBottom:18 }}>
+            <div style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(67,56,202,.35)', border:'1px solid rgba(99,102,241,.4)', borderRadius:99, padding:'4px 14px', marginBottom:12, fontSize:'.72rem', fontWeight:700, color:'#a5b4fc', textTransform:'uppercase', letterSpacing:'.07em' }}>
               🎓 Chitkara University, Punjab
             </div>
-
-            <h2 style={{
-              color: '#fff', fontWeight: 800,
-              fontSize: 'clamp(1.3rem,2.2vw,1.65rem)',
-              margin: '0 0 6px', lineHeight: 1.25,
-            }}>
+            <h2 style={{ color:'#fff', fontWeight:800, fontSize:'clamp(1.3rem,2.2vw,1.65rem)', margin:'0 0 6px', lineHeight:1.25 }}>
               {slides[slide].caption}
             </h2>
-            <p style={{
-              color: 'rgba(255,255,255,.65)',
-              fontSize: '.88rem', margin: '0 0 16px', lineHeight: 1.6,
-            }}>
+            <p style={{ color:'rgba(255,255,255,.65)', fontSize:'.88rem', margin:'0 0 16px', lineHeight:1.6 }}>
               {slides[slide].sub}
             </p>
-
-            <div style={{ display: 'flex', gap: 20 }}>
-              {[
-                { val: '20K+',  lbl: 'Students'         },
-                { val: '1500+', lbl: 'Faculty & Staff'   },
-                { val: '70 ac', lbl: 'Campus Area'       },
-              ].map(s => (
+            <div style={{ display:'flex', gap:20 }}>
+              {[{ val:'20K+', lbl:'Students' }, { val:'1500+', lbl:'Faculty & Staff' }, { val:'70 ac', lbl:'Campus Area' }].map(s => (
                 <div key={s.lbl}>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', lineHeight: 1 }}>{s.val}</div>
-                  <div style={{ fontSize: '.7rem', color: 'rgba(255,255,255,.55)', marginTop: 2 }}>{s.lbl}</div>
+                  <div style={{ fontSize:'1.2rem', fontWeight:800, color:'#fff', lineHeight:1 }}>{s.val}</div>
+                  <div style={{ fontSize:'.7rem', color:'rgba(255,255,255,.55)', marginTop:2 }}>{s.lbl}</div>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Dot indicators */}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+          <div style={{ display:'flex', gap:8, justifyContent:'center' }}>
             {slides.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => changeSlide(i)}
-                aria-label={`Go to photo ${i + 1}`}
-                style={{
-                  width: slide === i ? 24 : 8, height: 8,
-                  borderRadius: 99, border: 0, cursor: 'pointer',
-                  background: slide === i ? '#818cf8' : 'rgba(255,255,255,.35)',
-                  transition: 'all 300ms',
-                  padding: 0,
-                }}
-              />
+              <button key={i} onClick={() => changeSlide(i)} aria-label={`Slide ${i+1}`} style={{ width:slide===i?24:8, height:8, borderRadius:99, border:0, cursor:'pointer', background:slide===i?'#818cf8':'rgba(255,255,255,.35)', transition:'all 300ms', padding:0 }} />
             ))}
           </div>
         </div>
       </div>
 
-      {/* ── Responsive: hide photo panel on small screens ── */}
       <style>{`
         @media (max-width: 900px) {
-          /* second column → hide */
-          div[style*="gridTemplateColumns: 1fr 1fr"] {
-            grid-template-columns: 1fr !important;
-          }
-          div[style*="background: #0b0f1e"] {
-            display: none !important;
-          }
+          div[style*="gridTemplateColumns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+          div[style*="background: #0b0f1e"] { display: none !important; }
         }
       `}</style>
     </div>
