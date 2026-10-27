@@ -47,9 +47,18 @@ const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 /* ── Public user shape — never includes password_hash ── */
 const publicUser = ({ id, name, email, role, status }) => ({ id, name, email, role, status });
 
+const ALLOWED_DOMAIN = 'chitkara.edu.in';
+
+const assertChitkaraDomain = (email) => {
+  if (!email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`)) {
+    throw new AppError(400, `Only @${ALLOWED_DOMAIN} email addresses are allowed`, 'INVALID_DOMAIN');
+  }
+};
+
 /* ── Auth operations ── */
 
 export async function register({ name, email, password, role }) {
+  assertChitkaraDomain(email);
   const allowedRoles = ['student', 'faculty'];
   const safeRole = allowedRoles.includes(role) ? role : 'student';
 
@@ -69,6 +78,7 @@ export async function register({ name, email, password, role }) {
 }
 
 export async function login({ email, password }) {
+  assertChitkaraDomain(email);
   const user = await users.findByEmail(email);
 
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {

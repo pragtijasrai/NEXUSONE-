@@ -1,17 +1,11 @@
 /**
  * Auth service — dual-mode: mock (dev/demo) or real backend.
  *
- * Mode is controlled by VITE_USE_MOCK in .env:
- *   VITE_USE_MOCK=true  → uses localStorage mock (no backend needed)
- *   VITE_USE_MOCK=false → calls real backend API
+ * VITE_USE_MOCK=true  → localStorage mock (no backend needed)
+ * VITE_USE_MOCK=false → calls the real Express + PostgreSQL backend
  *
- * Pages and contexts never know which mode is active — they always call
- * the same functions. This is the abstraction boundary.
- *
- * Mock mode is kept fully functional so the UI can be demoed without
- * a running PostgreSQL instance. The role-chip quick-login on the
- * Login page uses mock mode regardless of VITE_USE_MOCK so it always
- * works for quick demos.
+ * All auth operations enforce @chitkara.edu.in domain on the backend.
+ * The frontend also validates the domain before sending the request.
  */
 
 import { mockUsers, DEMO_PASSWORD } from '../data/mockUsers.js';
@@ -20,18 +14,12 @@ import { api, USE_MOCK, tokenStore } from './apiClient.js';
 
 const SESSION_KEY = 'session';
 
-/* ════════════════════════════════════════
-   SHARED HELPERS
-   ════════════════════════════════════════ */
-
+/* ── Shared ── */
 export function getSession() {
   return load(SESSION_KEY, null);
 }
 
-/* ════════════════════════════════════════
-   MOCK MODE (VITE_USE_MOCK=true)
-   ════════════════════════════════════════ */
-
+/* ── Mock mode ── */
 export function login(email, password) {
   const user = mockUsers.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
   if (!user || password !== DEMO_PASSWORD) return { ok: false, error: 'Email or demo password is incorrect.' };
@@ -52,15 +40,29 @@ export function logout() {
   tokenStore.clearAll();
 }
 
-/* ════════════════════════════════════════
-   REAL BACKEND MODE (VITE_USE_MOCK=false)
-   ════════════════════════════════════════ */
+/* ── Real backend ── */
 
-/**
- * Sign in against the real backend.
- * On success: stores user in localStorage, tokens in session/localStorage.
- * Returns { ok: true, user } or { ok: false, error: string }.
- */
+/** Register a new student or faculty account. */
+export async function registerRemote(name, email, password, role) {
+  if (USE_MOCK) {
+    return { ok: false, error: 'Registration requires the real backend. Set VITE_USE_MOCK=false.' };
+  }
+  try {
+    const { data } = await api('/auth/register', {
+      method: 'POST',
+      body: { name, email, password, role },
+      skipAuth: true,
+    });
+    tokenStore.setAccess(data.accessToken);
+    tokenStore.setRefresh(data.refreshToken);
+    save(SESSION_KEY, data.user);
+    return { ok: true, user: data.user };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+/** Sign in with email + password. */
 export async function loginRemote(email, password) {
   if (USE_MOCK) return login(email, password);
   try {
@@ -69,10 +71,8 @@ export async function loginRemote(email, password) {
       body: { email, password },
       skipAuth: true,
     });
-    /* Store tokens */
     tokenStore.setAccess(data.accessToken);
     tokenStore.setRefresh(data.refreshToken);
-    /* Store user profile in localStorage for persistence */
     save(SESSION_KEY, data.user);
     return { ok: true, user: data.user };
   } catch (e) {
@@ -80,25 +80,21 @@ export async function loginRemote(email, password) {
   }
 }
 
-/**
- * Sign out — revoke refresh token on backend, clear local state.
- */
+/** Sign out — revoke refresh token on backend, clear local state. */
 export async function logoutRemote() {
   if (!USE_MOCK) {
     const refreshToken = tokenStore.getRefresh();
     try {
       await api('/auth/logout', { method: 'POST', body: { refreshToken }, skipAuth: true });
     } catch {
-      /* Best-effort — clear local state regardless */
+      /* best-effort */
     }
   }
   remove(SESSION_KEY);
   tokenStore.clearAll();
 }
 
-/**
- * Fetch current user profile from backend (validates token is still good).
- */
+/** Fetch current user from backend (validates token is still good). */
 export async function fetchMe() {
   if (USE_MOCK) return getSession();
   try {

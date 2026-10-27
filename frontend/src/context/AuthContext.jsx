@@ -57,6 +57,13 @@ export function AuthProvider({ children }) {
     return r;
   }, []);
 
+  /* ── Real backend register ── */
+  const signUp = useCallback(async (name, email, password, role) => {
+    const r = await auth.registerRemote(name, email, password, role);
+    if (r.ok) setUser(r.user);
+    return r;
+  }, []);
+
   /* ── Real backend sign-in ── */
   const signInRemote = useCallback(async (email, password) => {
     const r = await auth.loginRemote(email, password);
@@ -78,7 +85,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signInRemote, signInAs, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signInRemote, signInAs, signOut }}>
       {children}
     </AuthContext.Provider>
   );

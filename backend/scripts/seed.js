@@ -36,10 +36,10 @@ async function seed() {
 
   /* ── Users (one per role) ── */
   const users = [
-    { name: 'Alex Morgan',      email: 'alex.morgan@northbridge.edu',     role: 'student',     dept: dept.id },
-    { name: 'Dr. Priya Raman',  email: 'priya.raman@northbridge.edu',     role: 'faculty',     dept: dept.id },
-    { name: 'Jordan Ellis',     email: 'jordan.ellis@northbridge.edu',    role: 'admin',       dept: dept.id },
-    { name: 'Sam Okafor',       email: 'sam.okafor@northbridge.edu',       role: 'maintenance', dept: dept.id },
+    { name: 'Alex Morgan',      email: 'alex.morgan@chitkara.edu.in',     role: 'student',     dept: dept.id },
+    { name: 'Dr. Priya Raman',  email: 'priya.raman@chitkara.edu.in',     role: 'faculty',     dept: dept.id },
+    { name: 'Jordan Ellis',     email: 'jordan.ellis@chitkara.edu.in',    role: 'admin',       dept: dept.id },
+    { name: 'Sam Okafor',       email: 'sam.okafor@chitkara.edu.in',       role: 'maintenance', dept: dept.id },
   ];
 
   for (const u of users) {

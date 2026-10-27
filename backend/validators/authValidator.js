@@ -7,15 +7,25 @@
 
 import { z } from 'zod';
 
+/* Chitkara University email domain enforced on all auth operations */
+const ALLOWED_DOMAIN = 'chitkara.edu.in';
+
+const chitkaraEmail = z.string()
+  .email('Enter a valid email address')
+  .refine(
+    (email) => email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`),
+    { message: `Only @${ALLOWED_DOMAIN} email addresses are allowed` },
+  );
+
 export const registerSchema = z.object({
   name:     z.string().min(2).max(100).trim(),
-  email:    z.string().email().toLowerCase(),
+  email:    chitkaraEmail.transform((e) => e.toLowerCase()),
   password: z.string().min(8).max(72),
   role:     z.enum(['student', 'faculty']).default('student'),
 });
 
 export const loginSchema = z.object({
-  email:    z.string().email(),
+  email:    chitkaraEmail,
   password: z.string().min(1),
 });
 
