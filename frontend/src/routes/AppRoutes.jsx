@@ -23,7 +23,17 @@ import Notifications    from '../pages/student/Notifications.jsx';
 import Profile          from '../pages/student/Profile.jsx';
 
 // Faculty
-import FacultyDashboard from '../pages/faculty/FacultyDashboard.jsx';
+import FacultyDashboard            from '../pages/faculty/FacultyDashboard.jsx';
+import FacultyClasses               from '../pages/faculty/FacultyClasses.jsx';
+import FacultyTimetable             from '../pages/faculty/FacultyTimetable.jsx';
+import FacultyAttendance            from '../pages/faculty/FacultyAttendance.jsx';
+import FacultyStudents              from '../pages/faculty/FacultyStudents.jsx';
+import FacultyAssignments           from '../pages/faculty/FacultyAssignments.jsx';
+import FacultyAnnouncements         from '../pages/faculty/FacultyAnnouncements.jsx';
+import FacultyNotifications         from '../pages/faculty/FacultyNotifications.jsx';
+import FacultyEvents                from '../pages/faculty/FacultyEvents.jsx';
+import FacultyRoomBooking           from '../pages/faculty/FacultyRoomBooking.jsx';
+import FacultyProfile               from '../pages/faculty/FacultyProfile.jsx';
 
 // Admin
 import AdminDashboard   from '../pages/admin/AdminDashboard.jsx';
@@ -73,13 +83,20 @@ export default function AppRoutes() {
       <Route path="/faculty" element={<ProtectedRoute role="faculty" />}>
         <Route element={<DashboardLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard"    element={<FacultyDashboard />} />
-          <Route path="schedule"     element={<ComingSoon />} />
-          <Route path="students"     element={<ComingSoon />} />
-          <Route path="assignments"  element={<ComingSoon />} />
-          <Route path="announcements" element={<ComingSoon />} />
-          <Route path="events"       element={<ComingSoon />} />
-          <Route path="rooms"        element={<RoomBooking />} />
+          <Route path="dashboard"     element={<FacultyDashboard />} />
+          <Route path="classes"       element={<FacultyClasses />} />
+          <Route path="schedule"      element={<FacultyClasses />} />
+          <Route path="timetable"     element={<FacultyTimetable />} />
+          <Route path="attendance"    element={<FacultyAttendance />} />
+          <Route path="students"      element={<FacultyStudents />} />
+          <Route path="assignments"   element={<FacultyAssignments />} />
+          <Route path="submissions"   element={<FacultyAssignments />} />
+          <Route path="announcements" element={<FacultyAnnouncements />} />
+          <Route path="notifications" element={<FacultyNotifications />} />
+          <Route path="events"        element={<FacultyEvents />} />
+          <Route path="rooms"         element={<FacultyRoomBooking />} />
+          <Route path="room-booking"  element={<FacultyRoomBooking />} />
+          <Route path="profile"       element={<FacultyProfile />} />
         </Route>
       </Route>
 
