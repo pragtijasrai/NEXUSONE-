@@ -37,7 +37,11 @@ import AdminReports     from '../pages/admin/AdminReports.jsx';
 import AdminSettings    from '../pages/admin/AdminSettings.jsx';
 
 // Maintenance
-import MaintenanceDashboard from '../pages/maintenance/MaintenanceDashboard.jsx';
+import MaintenanceDashboard  from '../pages/maintenance/MaintenanceDashboard.jsx';
+import MaintenanceTickets    from '../pages/maintenance/MaintenanceTickets.jsx';
+import MaintenanceSchedule   from '../pages/maintenance/MaintenanceSchedule.jsx';
+import MaintenanceReports    from '../pages/maintenance/MaintenanceReports.jsx';
+import MaintenanceSettings   from '../pages/maintenance/MaintenanceSettings.jsx';
 
 export default function AppRoutes() {
   return (
@@ -103,8 +107,10 @@ export default function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<MaintenanceDashboard />} />
-          <Route path="tickets"   element={<ComingSoon />} />
-          <Route path="schedule"  element={<ComingSoon />} />
+          <Route path="tickets"   element={<MaintenanceTickets />} />
+          <Route path="schedule"  element={<MaintenanceSchedule />} />
+          <Route path="reports"   element={<MaintenanceReports />} />
+          <Route path="settings"  element={<MaintenanceSettings />} />
         </Route>
       </Route>
 
