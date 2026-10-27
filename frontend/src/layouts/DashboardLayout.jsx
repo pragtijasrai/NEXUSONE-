@@ -18,8 +18,7 @@ const roleGradients = {
   maintenance: 'linear-gradient(135deg,#f59e0b,#fbbf24)',
 };
 
-/* Admin portal uses its own dark sidebar theme */
-const adminSidebarStyle = {
+const darkSidebarStyle = {
   background: '#0d1117',
   borderRight: '1px solid rgba(255,255,255,.07)',
 };
@@ -30,15 +29,15 @@ export default function DashboardLayout() {
   const { notify } = useToast();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
-  const [drawer, setDrawer] = useState(false);
-  const [searchQ, setSearchQ] = useState('');
+  const [drawer,    setDrawer]    = useState(false);
+  const [searchQ,   setSearchQ]   = useState('');
 
   const isAdmin       = user.role === 'admin';
-  const isMaintenance = user.role === 'maintenance';
-  const isDark        = isAdmin || isMaintenance;
+  const isFaculty     = user.role === 'faculty';
+  const isDark        = isAdmin || isFaculty;   // dark sidebar + topbar for admin & faculty
   const items = navByRole[user.role] ?? [];
   const initials = user.name.split(' ').map(p => p[0]).slice(0, 2).join('');
-  const grad = roleGradients[user.role] || roleGradients.student;
+  const grad     = roleGradients[user.role] || roleGradients.student;
 
   const handleLogout = () => {
     signOut();
@@ -49,6 +48,7 @@ export default function DashboardLayout() {
   return (
     <div
       className={`shell ${collapsed ? 'shell--collapsed' : ''}`}
+      data-theme={isDark ? 'dark' : undefined}
       style={isDark ? { background: '#0d1117' } : {}}
     >
       {drawer && (
@@ -59,7 +59,7 @@ export default function DashboardLayout() {
       <aside
         className={`sidebar ${drawer ? 'sidebar--open' : ''}`}
         aria-label="Primary navigation"
-        style={isDark ? adminSidebarStyle : {}}
+        style={isDark ? darkSidebarStyle : {}}
       >
         <div className="sidebar__head" style={isDark ? { background: '#0d1117', borderBottomColor: 'rgba(255,255,255,.07)' } : {}}>
           <Logo to={items[0]?.to} />
@@ -100,8 +100,12 @@ export default function DashboardLayout() {
             </div>
             {!collapsed && (
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: '.83rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isDark ? '#eceefb' : 'inherit' }}>{user.name}</div>
-                <div style={{ fontSize: '.72rem', color: isDark ? '#7880a8' : 'var(--muted)' }}>{roleLabels[user.role]}</div>
+                <div style={{ fontSize: '.83rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isDark ? '#eceefb' : 'inherit' }}>
+                  {user.name}
+                </div>
+                <div style={{ fontSize: '.72rem', color: isDark ? '#7880a8' : 'var(--muted)' }}>
+                  {roleLabels[user.role]}
+                </div>
               </div>
             )}
           </div>
@@ -111,7 +115,10 @@ export default function DashboardLayout() {
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             style={isDark ? { color: '#7880a8' } : {}}
           >
-            {collapsed ? <PanelLeftOpen size={17} style={{ flexShrink: 0 }} /> : <PanelLeftClose size={17} style={{ flexShrink: 0 }} />}
+            {collapsed
+              ? <PanelLeftOpen  size={17} style={{ flexShrink: 0 }} />
+              : <PanelLeftClose size={17} style={{ flexShrink: 0 }} />
+            }
             <span>Collapse</span>
           </button>
         </div>
@@ -138,7 +145,7 @@ export default function DashboardLayout() {
               borderColor: 'rgba(255,255,255,.1)',
             } : {}}
           >
-            <Search size={15} aria-hidden="true" style={{ flexShrink: 0, color: isAdmin ? '#7880a8' : 'var(--muted)' }} />
+            <Search size={15} aria-hidden="true" style={{ flexShrink: 0, color: isDark ? '#7880a8' : 'var(--muted)' }} />
             <input
               type="search"
               placeholder="Search anything..."
@@ -153,6 +160,7 @@ export default function DashboardLayout() {
                 }
               }}
             />
+            {/* Ctrl+K hint — admin only */}
             {isAdmin && (
               <span style={{
                 fontSize: '.72rem', color: '#7880a8',
@@ -167,7 +175,8 @@ export default function DashboardLayout() {
           </label>
 
           <div className="topbar__actions">
-            {!isAdmin && (
+            {/* Theme toggle — only for light-theme portals (student / maintenance) */}
+            {!isDark && (
               <button
                 className="icon-btn"
                 onClick={toggle}
@@ -179,7 +188,11 @@ export default function DashboardLayout() {
 
             <button
               className="icon-btn notif-dot"
-              onClick={() => user.role === 'student' ? navigate('/student/notifications') : notify('Notification centre — coming in the next phase!', 'info')}
+              onClick={() => {
+                if (user.role === 'student')  return navigate('/student/notifications');
+                if (user.role === 'faculty')  return navigate('/faculty/notifications');
+                notify('Notification centre — coming soon!', 'info');
+              }}
               aria-label="Notifications"
               style={isDark ? { color: '#7880a8', position: 'relative' } : {}}
             >
@@ -188,37 +201,32 @@ export default function DashboardLayout() {
                 <span style={{
                   position: 'absolute', top: 4, right: 4,
                   width: 7, height: 7, borderRadius: '50%',
-                  background: '#f87171',
-                  border: '1.5px solid #161b2e',
+                  background: '#f87171', border: '1.5px solid #161b2e',
                 }} />
               )}
             </button>
 
             <div
               className="user-chip"
-              onClick={() => user.role === 'student' && navigate('/student/profile')}
+              onClick={() => {
+                if (user.role === 'student') navigate('/student/profile');
+                if (user.role === 'faculty') navigate('/faculty/profile');
+              }}
               style={{
-                cursor: user.role === 'student' ? 'pointer' : 'default',
-                ...(isAdmin ? {
+                cursor: (user.role === 'student' || user.role === 'faculty') ? 'pointer' : 'default',
+                ...(isDark ? {
                   background: 'rgba(255,255,255,.06)',
                   border: '1px solid rgba(255,255,255,.08)',
                   borderRadius: 10, padding: '5px 12px',
                 } : {}),
               }}
             >
-              <div
-                className="avatar"
-                style={{ background: grad }}
-              >
-                {initials}
-              </div>
+              <div className="avatar" style={{ background: grad }}>{initials}</div>
               <div className="user-chip__meta">
                 <strong style={isDark ? { color: '#eceefb' } : {}}>{user.name}</strong>
                 <small style={isDark ? { color: '#7880a8' } : {}}>{roleLabels[user.role]}</small>
               </div>
-              {isAdmin && (
-                <ChevronRight size={14} style={{ color: '#7880a8', marginLeft: 4 }} />
-              )}
+              {isAdmin && <ChevronRight size={14} style={{ color: '#7880a8', marginLeft: 4 }} />}
             </div>
 
             <button
