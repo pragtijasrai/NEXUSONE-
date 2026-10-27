@@ -177,7 +177,7 @@ export default function DashboardLayout() {
 
             <button
               className="icon-btn notif-dot"
-              onClick={() => notify('Notification centre — coming soon!', 'info')}
+              onClick={() => user.role === 'student' ? navigate('/student/notifications') : notify('Notification centre — coming in the next phase!', 'info')}
               aria-label="Notifications"
               style={isAdmin ? { color: '#7880a8', position: 'relative' } : {}}
             >
@@ -194,11 +194,15 @@ export default function DashboardLayout() {
 
             <div
               className="user-chip"
-              style={isAdmin ? {
-                background: 'rgba(255,255,255,.06)',
-                border: '1px solid rgba(255,255,255,.08)',
-                borderRadius: 10, padding: '5px 12px',
-              } : {}}
+              onClick={() => user.role === 'student' && navigate('/student/profile')}
+              style={{
+                cursor: user.role === 'student' ? 'pointer' : 'default',
+                ...(isAdmin ? {
+                  background: 'rgba(255,255,255,.06)',
+                  border: '1px solid rgba(255,255,255,.08)',
+                  borderRadius: 10, padding: '5px 12px',
+                } : {}),
+              }}
             >
               <div
                 className="avatar"

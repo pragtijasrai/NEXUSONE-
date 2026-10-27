@@ -16,6 +16,11 @@ import CampusEvents     from '../pages/student/CampusEvents.jsx';
 import AIAssistant      from '../pages/student/AIAssistant.jsx';
 import CampusMap        from '../pages/student/CampusMap.jsx';
 import MyClasses from '../pages/student/MyClasses.jsx';
+import Maintenance      from '../pages/student/Maintenance.jsx';
+import LostFound        from '../pages/student/LostFound.jsx';
+import Announcements    from '../pages/student/Announcements.jsx';
+import Notifications    from '../pages/student/Notifications.jsx';
+import Profile          from '../pages/student/Profile.jsx';
 
 // Faculty
 import FacultyDashboard from '../pages/faculty/FacultyDashboard.jsx';
@@ -52,9 +57,11 @@ export default function AppRoutes() {
           <Route path="assistant"    element={<AIAssistant />} />
           <Route path="transport"    element={<CampusMap />} />
           <Route path="schedule" element={<MyClasses />} />
-          <Route path="maintenance"  element={<ComingSoon />} />
-          <Route path="lost-found"   element={<ComingSoon />} />
-          <Route path="announcements" element={<ComingSoon />} />
+          <Route path="maintenance"  element={<Maintenance />} />
+          <Route path="lost-found"   element={<LostFound />} />
+          <Route path="announcements" element={<Announcements />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="profile"       element={<Profile />} />
         </Route>
       </Route>
 
