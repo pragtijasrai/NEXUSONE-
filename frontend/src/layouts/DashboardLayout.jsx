@@ -32,10 +32,16 @@ export default function DashboardLayout() {
   const [drawer,    setDrawer]    = useState(false);
   const [searchQ,   setSearchQ]   = useState('');
 
+  /* Guard: if user is somehow null here, redirect to login */
+  if (!user || !user.role || !user.name) {
+    navigate('/login', { replace: true });
+    return null;
+  }
+
   const isAdmin       = user.role === 'admin';
-  const isFaculty     = user.role === 'faculty';
-  const isDark        = isAdmin || isFaculty;   // dark sidebar + topbar for admin & faculty
-  const items = navByRole[user.role] ?? [];
+  const isMaintenance = user.role === 'maintenance';
+  const isDark        = isAdmin || isMaintenance;
+  const items    = navByRole[user.role] ?? [];
   const initials = user.name.split(' ').map(p => p[0]).slice(0, 2).join('');
   const grad     = roleGradients[user.role] || roleGradients.student;
 
@@ -161,7 +167,7 @@ export default function DashboardLayout() {
               }}
             />
             {/* Ctrl+K hint — admin only */}
-            {isAdmin && (
+            {isDark && (
               <span style={{
                 fontSize: '.72rem', color: '#7880a8',
                 background: 'rgba(255,255,255,.06)',
@@ -197,7 +203,7 @@ export default function DashboardLayout() {
               style={isDark ? { color: '#7880a8', position: 'relative' } : {}}
             >
               <Bell size={18} />
-              {isAdmin && (
+              {isDark && (
                 <span style={{
                   position: 'absolute', top: 4, right: 4,
                   width: 7, height: 7, borderRadius: '50%',
@@ -226,7 +232,7 @@ export default function DashboardLayout() {
                 <strong style={isDark ? { color: '#eceefb' } : {}}>{user.name}</strong>
                 <small style={isDark ? { color: '#7880a8' } : {}}>{roleLabels[user.role]}</small>
               </div>
-              {isAdmin && <ChevronRight size={14} style={{ color: '#7880a8', marginLeft: 4 }} />}
+              {isDark && <ChevronRight size={14} style={{ color: '#7880a8', marginLeft: 4 }} />}
             </div>
 
             <button
