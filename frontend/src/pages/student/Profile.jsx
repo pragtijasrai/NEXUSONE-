@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Mail, CreditCard, Building2, GraduationCap, Camera, Lock, Save, LogOut,
-  Moon, Sun, Trash2, CheckCircle2,
+  Moon, Sun, Trash2, CheckCircle2, Eye, EyeOff, KeyRound, X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useTheme } from '../../context/ThemeContext.jsx';
@@ -12,6 +12,7 @@ import { roleLabels } from '../../data/mockUsers.js';
 import {
   academicByUser, fallbackAcademic, defaultEditable, CONTACT_METHODS, NOTIFY_OPTIONS,
 } from '../../data/mockProfile.js';
+import { updateMyProfile, changeMyPassword } from '../../services/userService.js';
 
 /* ───────── small pieces ───────── */
 const Row = ({ icon: Icon, label, value }) => (
@@ -24,6 +25,72 @@ const Row = ({ icon: Icon, label, value }) => (
 );
 
 const phoneOk = (v) => v === '' || /^[+]?[0-9\s-]{10,15}$/.test(v.trim());
+
+/* ───────── change password modal ───────── */
+function ChangePasswordModal({ onClose, onSubmit, busy }) {
+  const [f, setF] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [show, setShow] = useState({ cur: false, new: false, conf: false });
+  const [errors, setErrors] = useState({});
+
+  const set = (k) => (e) => { setF((p) => ({ ...p, [k]: e.target.value })); setErrors((x) => ({ ...x, [k]: '' })); };
+
+  const submit = (e) => {
+    e.preventDefault();
+    const err = {};
+    if (!f.currentPassword) err.currentPassword = 'Enter your current password.';
+    if (!f.newPassword || f.newPassword.length < 8) err.newPassword = 'New password must be at least 8 characters.';
+    if (f.newPassword !== f.confirmPassword) err.confirmPassword = 'Passwords do not match.';
+    setErrors(err);
+    if (Object.keys(err).length === 0) onSubmit(f);
+  };
+
+  const field = (key, label, placeholder, showKey) => (
+    <label className="field">
+      {label}
+      <div style={{ position: 'relative' }}>
+        <input
+          type={show[showKey] ? 'text' : 'password'}
+          value={f[key]}
+          onChange={set(key)}
+          placeholder={placeholder}
+          aria-invalid={!!errors[key]}
+          style={{ paddingRight: 40 }}
+        />
+        <button type="button" onClick={() => setShow((p) => ({ ...p, [showKey]: !p[showKey] }))}
+          style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}
+          aria-label={show[showKey] ? 'Hide password' : 'Show password'}>
+          {show[showKey] ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </div>
+      {errors[key] && <span className="field__error" role="alert">{errors[key]}</span>}
+    </label>
+  );
+
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby="pw-title"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(10,12,26,.55)', display: 'grid', placeItems: 'center', zIndex: 60, padding: 16 }}>
+      <form className="card" onSubmit={submit} noValidate style={{ width: 'min(460px, 100%)', boxShadow: 'var(--shadow-lg)' }}>
+        <div className="section-header">
+          <h2 id="pw-title" style={{ fontSize: '1.2rem' }}>Change Password</h2>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </div>
+        {field('currentPassword', 'Current password', 'Enter current password', 'cur')}
+        {field('newPassword', 'New password', 'At least 8 characters', 'new')}
+        {field('confirmPassword', 'Confirm new password', 'Re-enter new password', 'conf')}
+        <p className="field__hint" style={{ marginTop: -4 }}>
+          You will be logged out of other devices after changing your password.
+        </p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button type="button" className="btn btn--ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn--primary" disabled={busy}>
+            {busy ? 'Changing…' : 'Change password'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 /* ───────── page ───────── */
 export default function Profile() {
@@ -38,10 +105,13 @@ export default function Profile() {
   const academic = academicByUser[user.id] ?? fallbackAcademic;
 
   const saved = load(storeKey, {});
-  const [form, setForm] = useState({ ...defaultEditable, ...saved.form });
+  const [form, setForm] = useState({ ...defaultEditable, ...saved.form, phone: saved.form?.phone ?? user.phone ?? '' });
   const [photo, setPhoto] = useState(saved.photo ?? null);
   const [errors, setErrors] = useState({});
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [showPwModal, setShowPwModal] = useState(false);
+  const [pwBusy, setPwBusy] = useState(false);
 
   const setField = (k, v) => { setForm((p) => ({ ...p, [k]: v })); setDirty(true); };
 
@@ -56,20 +126,47 @@ export default function Profile() {
     reader.readAsDataURL(file);
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     const err = {};
     if (!phoneOk(form.phone)) err.phone = 'Enter 10–15 digits (you may start with +).';
     setErrors(err);
     if (Object.keys(err).length) return;
-    const ok = save(storeKey, { form, photo });
-    if (ok) { setDirty(false); notify('Profile saved.', 'success'); }
-    else notify('Could not save. Try a smaller photo.', 'error');
+
+    setSaving(true);
+    try {
+      /* Send only the fields the API accepts: name, phone, avatar_url */
+      await updateMyProfile({
+        name: user.name,
+        phone: form.phone,
+      });
+      /* Save notification preferences locally (no API for these) */
+      const ok = save(storeKey, { form, photo });
+      setDirty(false);
+      notify('Profile saved.', 'success');
+    } catch (e) {
+      notify(e.message || 'Could not save profile. Please try again.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (f) => {
+    setPwBusy(true);
+    try {
+      await changeMyPassword({ currentPassword: f.currentPassword, newPassword: f.newPassword });
+      notify('Password changed successfully. Other devices will be logged out.', 'success');
+      setShowPwModal(false);
+    } catch (e) {
+      notify(e.message || 'Failed to change password.', 'error');
+    } finally {
+      setPwBusy(false);
+    }
   };
 
   const reset = () => {
     remove(storeKey);
-    setForm(defaultEditable); setPhoto(null); setErrors({}); setDirty(false);
+    setForm({ ...defaultEditable, phone: user.phone ?? '' }); setPhoto(null); setErrors({}); setDirty(false);
     notify('Profile preferences reset to defaults.', 'info');
   };
 
@@ -87,6 +184,8 @@ export default function Profile() {
         <div style={{ position: 'relative' }}>
           {photo ? (
             <img src={photo} alt={`${user.name} profile`} style={{ width: 88, height: 88, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(255,255,255,.4)' }} />
+          ) : user.avatar_url ? (
+            <img src={user.avatar_url} alt={`${user.name} profile`} style={{ width: 88, height: 88, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(255,255,255,.4)' }} />
           ) : (
             <div className="avatar" style={{ width: 88, height: 88, fontSize: '1.6rem', border: '3px solid rgba(255,255,255,.4)' }}>{initials}</div>
           )}
@@ -116,8 +215,8 @@ export default function Profile() {
           </div>
           <dl className="facts">
             <Row icon={Mail}          label="University email" value={user.email} />
-            <Row icon={CreditCard}        label="Student ID"       value={user.demoId} />
-            <Row icon={Building2}     label="Department"       value={user.department} />
+            <Row icon={CreditCard}    label="Student ID"       value={user.demoId || `STU-${String(user.id).padStart(4, '0')}`} />
+            <Row icon={Building2}     label="Department"       value={user.department || 'Computer Science & Engineering'} />
             <Row icon={GraduationCap} label="Course"           value={academic.course} />
             <Row label="Semester"      value={academic.semester} />
             <Row label="Section"       value={academic.section} />
@@ -159,6 +258,17 @@ export default function Profile() {
             </div>
           </fieldset>
 
+          {/* Change password button */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', borderTop: '1px solid var(--border)' }}>
+            <div>
+              <div style={{ fontWeight: 500, fontSize: '.9rem' }}>Password</div>
+              <div className="muted small">Change your account password</div>
+            </div>
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setShowPwModal(true)}>
+              <KeyRound size={14} aria-hidden="true" /> Change password
+            </button>
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', borderTop: '1px solid var(--border)' }}>
             <div>
               <div style={{ fontWeight: 500, fontSize: '.9rem' }}>Appearance</div>
@@ -172,9 +282,9 @@ export default function Profile() {
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" className="btn btn--ghost" onClick={reset}><Trash2 size={16} aria-hidden="true" /> Reset</button>
-            <button type="submit" className="btn btn--primary" disabled={!dirty}>
-              {dirty ? <Save size={16} aria-hidden="true" /> : <CheckCircle2 size={16} aria-hidden="true" />}
-              {dirty ? 'Save changes' : 'Saved'}
+            <button type="submit" className="btn btn--primary" disabled={!dirty || saving}>
+              {saving ? <Save size={16} aria-hidden="true" /> : dirty ? <Save size={16} aria-hidden="true" /> : <CheckCircle2 size={16} aria-hidden="true" />}
+              {saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
             </button>
           </div>
         </form>
@@ -189,6 +299,7 @@ export default function Profile() {
         <button className="btn btn--danger" onClick={logout}><LogOut size={16} aria-hidden="true" /> Sign out</button>
       </div>
 
+      {showPwModal && <ChangePasswordModal onClose={() => setShowPwModal(false)} onSubmit={handleChangePassword} busy={pwBusy} />}
       <style>{`@media (max-width: 860px){ .profile-grid{ grid-template-columns: 1fr !important; } } @media (max-width: 420px){ .notify-grid{ grid-template-columns: 1fr !important; } }`}</style>
     </div>
   );

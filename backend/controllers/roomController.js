@@ -13,7 +13,14 @@ const roomSchema = z.object({
 
 export const list = asyncHandler(async (req, res) => {
   const { type, building, search, page, limit, sortBy, sortDir } = req.query;
-  const result = await rooms.findAll({ type, building, search, page: Number(page)||1, limit: Math.min(Number(limit)||20,100), sortBy, sortDir });
+  const isAdmin = req.user?.role === 'admin';
+  const result = await rooms.findAll({
+    type, building, search,
+    page: Number(page)||1,
+    limit: Math.min(Number(limit)||20,100),
+    sortBy, sortDir,
+    includeInactive: isAdmin,
+  });
   res.json({ success: true, message: 'Rooms retrieved', data: result });
 });
 

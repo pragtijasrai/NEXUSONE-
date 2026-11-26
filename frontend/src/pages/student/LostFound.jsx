@@ -1,36 +1,51 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import {
   Search, Plus, X, MapPin, Calendar, PackageSearch, PackageCheck, ShieldCheck,
   Laptop, BookOpen, CreditCard, Backpack, KeyRound, Shirt, Watch, HelpCircle, Hand, CheckCircle2,
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext.jsx';
-import {
-  CATEGORIES, LOCATIONS, CONTACT_OPTIONS, initialItems,
-} from '../../data/mockLostFound.js';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { LoadingSpinner, ErrorState, EmptyState } from '../../components/common/ApiStates.jsx';
+import * as lfService from '../../services/lostFoundService.js';
+
+/* ───────── constants ───────── */
+const CATEGORIES = [
+  'Electronics', 'Books & Notes', 'ID & Cards', 'Bags', 'Keys',
+  'Clothing', 'Accessories', 'Other',
+];
+
+const LOCATIONS = [
+  'CS Block', 'Engineering Block', 'Library', 'Cafeteria', 'Hostel A',
+  'Innovation Hub', 'Main Auditorium', 'Sports Ground', 'Shuttle / Bus Stop',
+];
+
+/* DB category → icon mapping */
+const catIcon = {
+  'electronics': Laptop, 'books': BookOpen, 'documents': CreditCard,
+  'bags': Backpack, 'keys': KeyRound, 'clothing': Shirt,
+  'accessories': Watch, 'other': HelpCircle,
+};
+
+/* DB status → badge classes */
+const statusBadge = {
+  open:     ['badge badge--warn',  'Open'],
+  claimed:  ['badge badge--live',  'Claim under review'],
+  returned: ['badge badge--done',  'Returned'],
+  expired:  ['badge badge--next',  'Expired'],
+};
 
 /* ───────── helpers ───────── */
-const catIcon = {
-  'Electronics': Laptop, 'Books & Notes': BookOpen, 'ID & Cards': CreditCard,
-  'Bags': Backpack, 'Keys': KeyRound, 'Clothing': Shirt,
-  'Accessories': Watch, 'Other': HelpCircle,
+const formatDate = (iso) => {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 };
-const statusBadge = {
-  open:     ['badge badge--warn',    'Open'],
-  claimed:  ['badge badge--live',    'Claim under review'],
-  returned: ['badge badge--done',    'Returned'],
-};
-const todayStr = () =>
-  new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 const todayISO = () => new Date().toISOString().slice(0, 10);
-const isoToStr = (iso) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 
 /* ───────── report modal (lost or found) ───────── */
-function ReportModal({ type, onClose, onSubmit }) {
+function ReportModal({ type, onClose, onSubmit, busy }) {
   const isLost = type === 'lost';
   const [f, setF] = useState({
-    name: '', description: '', category: '', location: '',
-    date: todayISO(), contact: CONTACT_OPTIONS[0], photo: null,
+    title: '', description: '', category: '', location: '', date: todayISO(),
   });
   const [errors, setErrors] = useState({});
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -39,12 +54,10 @@ function ReportModal({ type, onClose, onSubmit }) {
   const submit = (e) => {
     e.preventDefault();
     const err = {};
-    if (f.name.trim().length < 3) err.name = 'Enter the item name.';
+    if (f.title.trim().length < 3) err.title = 'Enter the item name (min 3 characters).';
     if (f.description.trim().length < 10) err.description = 'Add a short description (at least 10 characters).';
     if (!f.category) err.category = 'Choose a category.';
     if (!f.location) err.location = isLost ? 'Where did you last see it?' : 'Where did you find it?';
-    if (!f.date) err.date = 'Choose a date.';
-    else if (f.date > todayISO()) err.date = 'Date cannot be in the future.';
     setErrors(err);
     if (Object.keys(err).length === 0) onSubmit({ ...f, type });
   };
@@ -60,8 +73,8 @@ function ReportModal({ type, onClose, onSubmit }) {
         </div>
 
         <label className="field">Item name
-          <input value={f.name} onChange={set('name')} maxLength={60} placeholder="e.g. Black wallet" aria-invalid={!!errors.name} />
-          <Err k="name" />
+          <input value={f.title} onChange={set('title')} maxLength={120} placeholder="e.g. Black wallet" aria-invalid={!!errors.title} />
+          <Err k="title" />
         </label>
 
         <label className="field">Description
@@ -86,32 +99,13 @@ function ReportModal({ type, onClose, onSubmit }) {
             </select>
             <Err k="location" />
           </label>
-          <label className="field">Date
-            <input type="date" value={f.date} max={todayISO()} onChange={set('date')} aria-invalid={!!errors.date} />
-            <Err k="date" />
-          </label>
-          <label className="field">Contact preference
-            <select value={f.contact} onChange={set('contact')}>
-              {CONTACT_OPTIONS.map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </label>
         </div>
 
-        <label className="field">Photo (optional)
-          <input type="file" accept="image/png,image/jpeg" style={{ padding: '8px 14px' }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file && file.size > 2 * 1024 * 1024) { setErrors((p) => ({ ...p, photo: 'Photo must be under 2 MB.' })); e.target.value = ''; return; }
-              setErrors((p) => ({ ...p, photo: undefined }));
-              setF((p) => ({ ...p, photo: file ?? null }));
-            }} />
-          <span className="field__hint">PNG or JPG, up to 2 MB. Your phone number and student ID are never shown publicly.</span>
-          <Err k="photo" />
-        </label>
-
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn--primary">Submit report</button>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button type="button" className="btn btn--ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn--primary" disabled={busy}>
+            {busy ? 'Submitting…' : 'Submit report'}
+          </button>
         </div>
       </form>
     </div>
@@ -119,7 +113,7 @@ function ReportModal({ type, onClose, onSubmit }) {
 }
 
 /* ───────── claim modal ───────── */
-function ClaimModal({ item, onClose, onSubmit }) {
+function ClaimModal({ item, onClose, onSubmit, busy }) {
   const [detail, setDetail] = useState('');
   const [error, setError] = useState('');
   const submit = (e) => {
@@ -136,7 +130,7 @@ function ClaimModal({ item, onClose, onSubmit }) {
           <h2 id="claim-title" style={{ fontSize: '1.2rem' }}>{item.type === 'found' ? 'Claim this item' : 'I found this item'}</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
-        <p className="muted small" style={{ marginTop: 0 }}><strong>{item.name}</strong> · {item.location}</p>
+        <p className="muted small" style={{ marginTop: 0 }}><strong>{item.title}</strong> · {item.location || 'Unknown location'}</p>
         <label className="field">
           {item.type === 'found' ? 'Proof of ownership' : 'Where and when did you find it?'}
           <textarea value={detail} onChange={(e) => { setDetail(e.target.value); setError(''); }} rows={3} maxLength={300}
@@ -148,8 +142,10 @@ function ClaimModal({ item, onClose, onSubmit }) {
           The reporter or campus staff will verify this before anything is handed over.
         </p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn--primary"><ShieldCheck size={16} aria-hidden="true" /> Submit request</button>
+          <button type="button" className="btn btn--ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn--primary" disabled={busy}>
+            <ShieldCheck size={16} aria-hidden="true" /> {busy ? 'Submitting…' : 'Submit request'}
+          </button>
         </div>
       </form>
     </div>
@@ -157,42 +153,52 @@ function ClaimModal({ item, onClose, onSubmit }) {
 }
 
 /* ───────── item card ───────── */
-function ItemCard({ item, onClaim, onReturn }) {
+function ItemCard({ item, currentUserId, onClaim, onMarkReturned, busyId }) {
   const Icon = catIcon[item.category] ?? HelpCircle;
-  const [bc, bl] = statusBadge[item.status];
+  const [bc, bl] = statusBadge[item.status] ?? ['badge badge--next', item.status];
   const isFound = item.type === 'found';
   const accent = isFound ? 'var(--ok)' : 'var(--warn)';
+  const isMine = item.reported_by === currentUserId;
+  const isBusy = busyId === item.id;
+
   return (
     <article className="card" style={{ display: 'grid', gap: 12, borderTop: `3px solid ${accent}`, opacity: item.status === 'returned' ? .7 : 1 }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <span className="stat__icon" style={{ color: accent }}><Icon size={20} aria-hidden="true" /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h3 style={{ margin: 0, fontSize: '1rem' }}>{item.name}</h3>
-          <div className="muted small">{item.category} · {item.id}</div>
+          <h3 style={{ margin: 0, fontSize: '1rem' }}>{item.title}</h3>
+          <div className="muted small">
+            {item.category} · #{item.id}
+            {isMine && <span className="badge badge--primary" style={{ marginLeft: 6, padding: '1px 8px' }}>Mine</span>}
+          </div>
         </div>
         <span className={bc}>{bl}</span>
       </div>
-      <p style={{ margin: 0, fontSize: '.88rem' }}>{item.description}</p>
-      <div className="muted small" style={{ display: 'grid', gap: 4 }}>
-        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><MapPin size={13} aria-hidden="true" />{isFound ? 'Found at' : 'Last seen at'} {item.location}</span>
-        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><Calendar size={13} aria-hidden="true" />{item.date}</span>
-        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><ShieldCheck size={13} aria-hidden="true" />Contact: {item.contact}</span>
-      </div>
 
-      {item.mine && item.claims.length > 0 && (
-        <div style={{ padding: 10, borderRadius: 'var(--r)', background: 'var(--info-bg)', color: 'var(--info)', fontSize: '.82rem' }}>
-          <strong>{item.claims.length} request{item.claims.length > 1 ? 's' : ''} received.</strong> Staff will verify before handover.
-        </div>
-      )}
+      {item.description && <p style={{ margin: 0, fontSize: '.88rem' }}>{item.description}</p>}
+
+      <div className="muted small" style={{ display: 'grid', gap: 4 }}>
+        {item.location && (
+          <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <MapPin size={13} aria-hidden="true" />{isFound ? 'Found at' : 'Last seen at'} {item.location}
+          </span>
+        )}
+        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          <Calendar size={13} aria-hidden="true" />{formatDate(item.created_at)}
+        </span>
+        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          <ShieldCheck size={13} aria-hidden="true" />Reported by {isMine ? 'You' : item.reporter_name || 'Another user'}
+        </span>
+      </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {item.status === 'returned' ? (
           <span className="muted small" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
             <CheckCircle2 size={14} aria-hidden="true" /> This item has been returned.
           </span>
-        ) : item.mine ? (
-          <button className="btn btn--ghost btn--sm" onClick={() => onReturn(item.id)}>
-            <PackageCheck size={14} aria-hidden="true" /> Mark as {isFound ? 'returned' : 'found'}
+        ) : isMine ? (
+          <button className="btn btn--ghost btn--sm" onClick={() => onMarkReturned(item.id)} disabled={isBusy}>
+            <PackageCheck size={14} aria-hidden="true" /> {isBusy ? 'Updating…' : `Mark as ${isFound ? 'returned' : 'returned'}`}
           </button>
         ) : item.status === 'open' ? (
           <button className="btn btn--primary btn--sm" onClick={() => onClaim(item)}>
@@ -208,51 +214,106 @@ function ItemCard({ item, onClaim, onReturn }) {
 
 /* ───────── page ───────── */
 export default function LostFound() {
+  const { user } = useAuth();
   const { notify } = useToast();
-  const [items, setItems] = useState(initialItems);
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [tab, setTab] = useState('lost');
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('All');
-  const [report, setReport] = useState(null);   // 'lost' | 'found' | null
+  const [report, setReport] = useState(null);
   const [claiming, setClaiming] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  /* Fetch items from API */
+  const fetchItems = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = {};
+      if (q.trim()) params.search = q.trim();
+      const result = await lfService.getItems(params);
+      setItems(result.rows || []);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [q]);
+
+  /* Debounced search: refetch when query changes (with a small delay) */
+  const [searchTimer, setSearchTimer] = useState(null);
+  const onSearch = (val) => {
+    setQ(val);
+    if (searchTimer) clearTimeout(searchTimer);
+    setSearchTimer(setTimeout(() => { fetchItems(); }, 300));
+  };
+
+  /* Initial load */
+  useState(() => { fetchItems(); }, []);
 
   const visible = useMemo(() => {
-    const term = q.trim().toLowerCase();
+    if (!items) return [];
     return items.filter((i) =>
       i.type === tab &&
-      (cat === 'All' || i.category === cat) &&
-      (!term || [i.name, i.description, i.location, i.category].some((s) => s.toLowerCase().includes(term))),
+      (cat === 'All' || i.category === cat.toLowerCase()) &&
+      (!q || [i.title, i.description, i.location].some((s) => (s || '').toLowerCase().includes(q.toLowerCase()))),
     );
   }, [items, tab, q, cat]);
 
-  const counts = {
-    lost: items.filter((i) => i.type === 'lost' && i.status !== 'returned').length,
-    found: items.filter((i) => i.type === 'found' && i.status !== 'returned').length,
+  const counts = useMemo(() => ({
+    lost:  items?.filter((i) => i.type === 'lost'  && i.status !== 'returned').length ?? 0,
+    found: items?.filter((i) => i.type === 'found' && i.status !== 'returned').length ?? 0,
+  }), [items]);
+
+  /* ── Actions ── */
+
+  const createReport = async (f) => {
+    setBusy(true);
+    try {
+      await lfService.createItem({
+        title: f.title.trim(),
+        description: f.description.trim(),
+        location: f.location,
+        category: f.category,
+        type: f.type,
+      });
+      notify(`Report submitted successfully.`, 'success');
+      setReport(null);
+      fetchItems();
+    } catch (e) { notify(e.message || 'Failed to submit report', 'error'); }
+    finally { setBusy(false); }
   };
 
-  const createReport = (f) => {
-    const id = `LF-${302 + items.length - initialItems.length}`;
-    setItems((p) => [{
-      id, type: f.type, name: f.name.trim(), category: f.category, description: f.description.trim(),
-      location: f.location, date: isoToStr(f.date), contact: f.contact,
-      status: 'open', mine: true, claims: [], hasPhoto: !!f.photo,
-    }, ...p]);
-    setReport(null); setTab(f.type); setCat('All'); setQ('');
-    notify(`Report ${id} submitted.`, 'success');
+  const submitClaim = async (_detail) => {
+    // Claim = update status to 'claimed' (only reporter can do this in current backend)
+    // For now, any user can claim via status update from open→claimed
+    setBusy(true);
+    try {
+      await lfService.updateItemStatus(claiming.id, 'claimed');
+      notify('Request sent. It will be verified before any handover.', 'success');
+      setClaiming(null);
+      fetchItems();
+    } catch (e) { notify(e.message || 'Failed to submit claim', 'error'); }
+    finally { setBusy(false); }
   };
 
-  const submitClaim = (detail) => {
-    setItems((p) => p.map((i) => i.id === claiming.id
-      ? { ...i, status: 'claimed', claims: [...i.claims, { id: i.claims.length + 1, by: 'You', detail, status: 'pending', date: todayStr() }] }
-      : i));
-    setClaiming(null);
-    notify('Request sent. It will be verified before any handover.', 'success');
+  const markReturned = async (id) => {
+    setBusyId(id);
+    try {
+      await lfService.updateItemStatus(id, 'returned');
+      notify('Marked as resolved. Thank you!', 'info');
+      fetchItems();
+    } catch (e) { notify(e.message || 'Failed to update item', 'error'); }
+    finally { setBusyId(null); }
   };
 
-  const markReturned = (id) => {
-    setItems((p) => p.map((i) => (i.id === id ? { ...i, status: 'returned' } : i)));
-    notify('Marked as resolved. Thank you!', 'info');
-  };
+  /* ── Render ── */
+
+  if (loading && !items) return <LoadingSpinner message="Loading lost & found items…" />;
+  if (error) return <ErrorState error={error} onRetry={fetchItems} />;
 
   return (
     <div className="stack">
@@ -282,7 +343,7 @@ export default function LostFound() {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 260px' }}>
           <Search size={16} aria-hidden="true" style={{ position: 'absolute', left: 14, top: 13, color: 'var(--muted)' }} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by item, place or keyword…"
+          <input value={q} onChange={(e) => onSearch(e.target.value)} placeholder="Search by item, place or keyword…"
             aria-label="Search items"
             style={{ width: '100%', minHeight: 42, padding: '0 14px 0 38px', border: '1.5px solid var(--border)', borderRadius: 'var(--r)', background: 'var(--surface)', color: 'var(--text)', font: 'inherit' }} />
         </div>
@@ -294,19 +355,18 @@ export default function LostFound() {
       </div>
 
       {visible.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: 40 }}>
-          <div style={{ fontSize: '2rem' }}>🔎</div>
-          <h3 style={{ margin: '8px 0 4px' }}>No {tab} items found</h3>
-          <p className="muted small" style={{ margin: 0 }}>Try a different search or category, or file a new report.</p>
-        </div>
+        <EmptyState icon="🔎" title={`No ${tab} items found`} description="Try a different search or category, or file a new report." />
       ) : (
         <div className="grid grid--3">
-          {visible.map((i) => <ItemCard key={i.id} item={i} onClaim={setClaiming} onReturn={markReturned} />)}
+          {visible.map((i) => (
+            <ItemCard key={i.id} item={i} currentUserId={user?.id}
+              onClaim={setClaiming} onMarkReturned={markReturned} busyId={busyId} />
+          ))}
         </div>
       )}
 
-      {report && <ReportModal type={report} onClose={() => setReport(null)} onSubmit={createReport} />}
-      {claiming && <ClaimModal item={claiming} onClose={() => setClaiming(null)} onSubmit={submitClaim} />}
+      {report && <ReportModal type={report} onClose={() => setReport(null)} onSubmit={createReport} busy={busy} />}
+      {claiming && <ClaimModal item={claiming} onClose={() => setClaiming(null)} onSubmit={submitClaim} busy={busy} />}
       <style>{`@media (max-width: 560px){ .lf-2col{ grid-template-columns: 1fr !important; } }`}</style>
     </div>
   );

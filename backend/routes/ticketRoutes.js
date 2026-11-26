@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as c from '../controllers/ticketController.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
+import { attachmentUpload } from '../middleware/upload.js';
 
 const r = Router();
 
@@ -9,5 +10,6 @@ r.get('/:id', authenticate, c.getOne);
 r.post('/',                    authenticate, c.create);
 r.patch('/:id/status',         authenticate, c.updateStatus);
 r.patch('/:id/assign',         authenticate, requireRole('admin'), c.assign);
+r.post('/:id/attachment',      authenticate, attachmentUpload.single('file'), c.uploadAttachment);
 
 export default r;

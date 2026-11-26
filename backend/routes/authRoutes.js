@@ -20,25 +20,31 @@ import * as c from '../controllers/authController.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate } from '../middleware/auth.js';
 import { authLimiter } from '../middleware/rateLimit.js';
+import { imageUpload } from '../middleware/upload.js';
 import {
   registerSchema,
   loginSchema,
   refreshSchema,
   updateProfileSchema,
   changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from '../validators/authValidator.js';
 
 const r = Router();
 
 /* Public — strict rate limit */
-r.post('/register', authLimiter, validate(registerSchema), c.register);
-r.post('/login',    authLimiter, validate(loginSchema),    c.login);
-r.post('/refresh',  authLimiter, validate(refreshSchema),  c.refresh);
-r.post('/logout',                                          c.logout);
+r.post('/register',        authLimiter, validate(registerSchema),       c.register);
+r.post('/login',           authLimiter, validate(loginSchema),          c.login);
+r.post('/refresh',         authLimiter, validate(refreshSchema),        c.refresh);
+r.post('/logout',                                                        c.logout);
+r.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), c.forgotPassword);
+r.post('/reset-password',  authLimiter, validate(resetPasswordSchema),  c.resetPassword);
 
 /* Protected — require valid access token */
-r.get('/me',          authenticate, c.me);
-r.patch('/me',        authenticate, validate(updateProfileSchema),  c.updateMe);
+r.get('/me',            authenticate, c.me);
+r.patch('/me',          authenticate, validate(updateProfileSchema),  c.updateMe);
 r.patch('/me/password', authenticate, validate(changePasswordSchema), c.changePassword);
+r.post('/me/avatar',    authenticate, imageUpload.single('avatar'),   c.uploadAvatar);
 
 export default r;

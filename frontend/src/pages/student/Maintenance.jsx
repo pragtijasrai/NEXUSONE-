@@ -1,291 +1,216 @@
-import { useMemo, useState } from 'react';
-import {
-  Plus, X, MapPin, User, Calendar, Wrench, Zap, Droplets, Armchair,
-  MonitorPlay, Wifi, Sparkles, HelpCircle, CheckCircle2, RotateCcw, Camera,
-} from 'lucide-react';
+import { useState } from 'react';
+import { Plus, X, MapPin, Calendar, Wrench, CheckCircle2, RotateCcw, AlertTriangle, Clock, User, History } from 'lucide-react';
+import { useApi } from '../../hooks/useApi.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
-import {
-  STATUSES, CATEGORIES, PRIORITIES, BUILDINGS, initialTickets,
-} from '../../data/mockMaintenance.js';
+import { LoadingSpinner, ErrorState, EmptyState } from '../../components/common/ApiStates.jsx';
+import * as ms from '../../services/maintenanceService.js';
 
-/* ───────── helpers ───────── */
-const catIcon = {
-  'Electrical': Zap, 'Plumbing': Droplets, 'Furniture': Armchair,
-  'Projector / Computer': MonitorPlay, 'Internet': Wifi,
-  'Cleanliness': Sparkles, 'Other': HelpCircle,
-};
-const prioBadge = {
-  Low: 'badge badge--next', Medium: 'badge badge--primary',
-  High: 'badge badge--warn', Urgent: 'badge badge--urgent',
-};
-const statusBadge = {
-  'Open': 'badge badge--warn', 'Assigned': 'badge badge--primary',
-  'In Progress': 'badge badge--live', 'Resolved': 'badge badge--done',
-  'Closed': 'badge badge--next',
-};
-const FILTERS = ['All', 'Open', 'In Progress', 'Resolved'];
-const matchesFilter = (t, f) =>
-  f === 'All' ? true
-  : f === 'Open' ? ['Open', 'Assigned'].includes(t.status)
-  : f === 'In Progress' ? t.status === 'In Progress'
-  : ['Resolved', 'Closed'].includes(t.status);
+const CATEGORIES = ['Electrical','Plumbing','Furniture','IT Equipment','Internet','Cleanliness','Other'];
+const PRIORITIES  = ['Low','Medium','High','Urgent'];
+const LOCATIONS   = ['CS Block','Engineering Block','Library','Hostel A','Innovation Hub','Main Auditorium','Cafeteria'];
 
-const today = () =>
-  new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+const statusBadge = { open:'badge--warn', assigned:'badge--primary', in_progress:'badge--live', resolved:'badge--done', closed:'badge--next' };
+const prioBadge   = { Low:'badge--next', Medium:'badge--primary', High:'badge--warn', Urgent:'badge--urgent' };
+const FILTERS = ['All','Open','In Progress','Resolved'];
 
-const emptyForm = {
-  category: '', title: '', description: '', building: '', room: '', priority: 'Medium', photo: null,
-};
+function TicketModal({ onClose, onSubmit, busy }) {
+  const [f, setF] = useState({ location:'', issue:'', priority:'Medium' });
+  const [err, setErr] = useState({});
+  const set = k => e => { setF(p=>({...p,[k]:e.target.value})); setErr(x=>({...x,[k]:''})); };
 
-/* ───────── status tracker ───────── */
-function Tracker({ status }) {
-  const idx = STATUSES.indexOf(status);
-  return (
-    <ol aria-label="Ticket progress" style={{ display: 'flex', listStyle: 'none', margin: 0, padding: 0, gap: 0 }}>
-      {STATUSES.map((s, i) => {
-        const done = i <= idx;
-        return (
-          <li key={s} style={{ flex: 1, textAlign: 'center', position: 'relative', fontSize: '.68rem', color: done ? 'var(--primary)' : 'var(--muted)', fontWeight: done ? 700 : 500 }}>
-            {i > 0 && (
-              <span aria-hidden="true" style={{ position: 'absolute', top: 7, right: '50%', width: '100%', height: 2, background: i <= idx ? 'var(--primary)' : 'var(--border)' }} />
-            )}
-            <span aria-hidden="true" style={{
-              position: 'relative', display: 'block', margin: '0 auto 4px', width: 16, height: 16, borderRadius: '50%',
-              background: done ? 'var(--primary)' : 'var(--surface)', border: `2px solid ${done ? 'var(--primary)' : 'var(--border)'}`,
-            }} />
-            {s}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-/* ───────── create-ticket modal ───────── */
-function TicketModal({ onClose, onSubmit }) {
-  const [f, setF] = useState(emptyForm);
-  const [errors, setErrors] = useState({});
-  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
-
-  const submit = (e) => {
+  const submit = e => {
     e.preventDefault();
-    const err = {};
-    if (!f.category) err.category = 'Choose a category.';
-    if (f.title.trim().length < 5) err.title = 'Enter a short title (at least 5 characters).';
-    if (f.description.trim().length < 10) err.description = 'Describe the problem (at least 10 characters).';
-    if (!f.building) err.building = 'Choose a building.';
-    if (!f.room.trim()) err.room = 'Enter the room or area.';
-    setErrors(err);
-    if (Object.keys(err).length === 0) onSubmit(f);
+    const errors = {};
+    if (!f.location) errors.location = 'Choose a location.';
+    if (!f.issue || f.issue.trim().length < 5) errors.issue = 'Describe the issue (min 5 chars).';
+    setErr(errors);
+    if (Object.keys(errors).length) return;
+    onSubmit(f);
   };
 
-  const Err = ({ k }) => errors[k] ? <span className="field__error" role="alert">{errors[k]}</span> : null;
-
   return (
-    <div
-      role="dialog" aria-modal="true" aria-labelledby="new-ticket-title"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(10,12,26,.55)', display: 'grid', placeItems: 'center', zIndex: 60, padding: 16, overflowY: 'auto' }}
-    >
-      <form className="card" onSubmit={submit} noValidate style={{ width: 'min(560px, 100%)', boxShadow: 'var(--shadow-lg)' }}>
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:60, display:'grid', placeItems:'center', padding:16 }}>
+      <form className="card" onSubmit={submit} noValidate style={{ width:'min(500px,100%)', boxShadow:'var(--shadow-lg)' }}>
         <div className="section-header">
-          <h2 id="new-ticket-title" style={{ fontSize: '1.2rem' }}>Report an issue</h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+          <h2>Report an Issue</h2>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18}/></button>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 14px', alignItems: 'start' }} className="form-2col">
-          <label className="field">Issue category
-            <select value={f.category} onChange={set('category')} aria-invalid={!!errors.category}>
-              <option value="">Select…</option>
-              {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
-            <Err k="category" />
-          </label>
-          <label className="field">Priority
-            <select value={f.priority} onChange={set('priority')}>
-              {PRIORITIES.map((p) => <option key={p}>{p}</option>)}
-            </select>
-          </label>
-        </div>
-
-        <label className="field">Issue title
-          <input value={f.title} onChange={set('title')} placeholder="e.g. Projector not turning on" aria-invalid={!!errors.title} maxLength={80} />
-          <Err k="title" />
+        <label className="field">Location
+          <select value={f.location} onChange={set('location')} aria-invalid={!!err.location}>
+            <option value="">Select…</option>
+            {LOCATIONS.map(l=><option key={l}>{l}</option>)}
+          </select>
+          {err.location && <span className="field__error">{err.location}</span>}
         </label>
-
-        <label className="field">Detailed description
-          <textarea value={f.description} onChange={set('description')} rows={3} maxLength={500}
-            placeholder="What's wrong, and since when?"
-            style={{ padding: '10px 14px', minHeight: 84, resize: 'vertical' }} aria-invalid={!!errors.description} />
-          <Err k="description" />
+        <label className="field">Issue description
+          <textarea value={f.issue} onChange={set('issue')} rows={3} placeholder="Describe the problem…"
+            style={{ padding:'10px 14px', minHeight:80, resize:'vertical' }} aria-invalid={!!err.issue}/>
+          {err.issue && <span className="field__error">{err.issue}</span>}
         </label>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 14px', alignItems: 'start' }} className="form-2col">
-          <label className="field">Building
-            <select value={f.building} onChange={set('building')} aria-invalid={!!errors.building}>
-              <option value="">Select…</option>
-              {BUILDINGS.map((b) => <option key={b}>{b}</option>)}
-            </select>
-            <Err k="building" />
-          </label>
-          <label className="field">Room / area
-            <input value={f.room} onChange={set('room')} placeholder="e.g. CS-110" aria-invalid={!!errors.room} />
-            <Err k="room" />
-          </label>
-        </div>
-
-        <label className="field">Photo (optional)
-          <input type="file" accept="image/png,image/jpeg"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file && file.size > 2 * 1024 * 1024) { setErrors((p) => ({ ...p, photo: 'Photo must be under 2 MB.' })); e.target.value = ''; return; }
-              setErrors((p) => ({ ...p, photo: undefined }));
-              setF((p) => ({ ...p, photo: file ?? null }));
-            }}
-            style={{ padding: '8px 14px' }} />
-          <span className="field__hint">PNG or JPG, up to 2 MB. (Stored only when the backend is connected.)</span>
-          <Err k="photo" />
+        <label className="field">Priority
+          <select value={f.priority} onChange={set('priority')}>
+            {PRIORITIES.map(p=><option key={p}>{p}</option>)}
+          </select>
         </label>
-
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:4 }}>
           <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn--primary"><Wrench size={16} aria-hidden="true" /> Submit ticket</button>
+          <button type="submit" className="btn btn--primary" disabled={busy}>
+            <Wrench size={16}/> {busy ? 'Submitting…' : 'Submit Ticket'}
+          </button>
         </div>
       </form>
     </div>
   );
 }
 
-/* ───────── page ───────── */
 export default function Maintenance() {
   const { user } = useAuth();
   const { notify } = useToast();
-  const [tickets, setTickets] = useState(initialTickets);
   const [filter, setFilter] = useState('All');
   const [showForm, setShowForm] = useState(false);
   const [openId, setOpenId] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  const counts = useMemo(() => ({
-    open: tickets.filter((t) => ['Open', 'Assigned'].includes(t.status)).length,
-    progress: tickets.filter((t) => t.status === 'In Progress').length,
-    done: tickets.filter((t) => ['Resolved', 'Closed'].includes(t.status)).length,
-  }), [tickets]);
+  const { data, loading, error, refetch } = useApi(ms.getTickets);
+  const tickets = data?.rows ?? [];
 
-  const visible = tickets.filter((t) => matchesFilter(t, filter));
+  /* Ticket detail for expanded view */
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
-  const create = (f) => {
-    const id = `MT-${1043 + tickets.length - initialTickets.length}`;
-    const ticket = {
-      id, title: f.title.trim(), category: f.category, description: f.description.trim(),
-      building: f.building, room: f.room.trim(), priority: f.priority, status: 'Open',
-      assignedTo: null, created: today(), resolution: null, hasPhoto: !!f.photo,
-    };
-    setTickets((p) => [ticket, ...p]);
-    setShowForm(false);
-    setFilter('All');
+  const counts = {
+    open: tickets.filter(t=>['open','assigned'].includes(t.status)).length,
+    progress: tickets.filter(t=>t.status==='in_progress').length,
+    done: tickets.filter(t=>['resolved','closed'].includes(t.status)).length,
+  };
+
+  const visible = tickets.filter(t => {
+    if (filter==='All') return true;
+    if (filter==='Open') return ['open','assigned'].includes(t.status);
+    if (filter==='In Progress') return t.status==='in_progress';
+    return ['resolved','closed'].includes(t.status);
+  });
+
+  const create = async (f) => {
+    setBusy(true);
+    try {
+      await ms.createTicket({ location: f.location, issue: f.issue, priority: f.priority.toLowerCase() });
+      notify('Ticket submitted!', 'success');
+      setShowForm(false);
+      refetch();
+    } catch (e) { notify(e.message || 'Failed to submit ticket', 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const reopen = async (id) => {
+    try {
+      await ms.updateStatus(id, 'open', 'Reopened by student');
+      notify('Ticket reopened.', 'info');
+      refetch();
+    } catch (e) { notify(e.message, 'error'); }
+  };
+
+  /* Fetch full ticket detail (includes history) when expanding */
+  const toggleExpand = async (id) => {
+    if (openId === id) { setOpenId(null); setDetail(null); return; }
     setOpenId(id);
-    notify(`Ticket ${id} submitted. An administrator will review it.`, 'success');
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const result = await ms.getTicket(id);
+      setDetail(result);
+    } catch { setDetail(null); }
+    finally { setDetailLoading(false); }
   };
 
-  const reopen = (id) => {
-    setTickets((p) => p.map((t) => t.id === id ? { ...t, status: 'Open', assignedTo: null, resolution: null } : t));
-    notify('Ticket reopened for review.', 'info');
-  };
+  if (loading) return <LoadingSpinner message="Loading tickets…" />;
+  if (error)   return <ErrorState error={error} onRetry={refetch} />;
 
   return (
     <div className="stack">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h1>Maintenance</h1>
-          <p className="muted">Report problems on campus and follow their progress, {user.name.split(' ')[0]}.</p>
-        </div>
-        <button className="btn btn--primary" onClick={() => setShowForm(true)}>
-          <Plus size={16} aria-hidden="true" /> Create Ticket
-        </button>
+      <header style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:12 }}>
+        <div><h1>Maintenance</h1><p className="muted">Report issues and track their progress, {user.name.split(' ')[0]}.</p></div>
+        <button className="btn btn--primary" onClick={()=>setShowForm(true)}><Plus size={16}/> Create Ticket</button>
       </header>
 
       {/* Summary */}
       <div className="grid grid--3">
-        {[
-          ['Open / assigned', counts.open, Wrench, 'stat__icon--warn'],
-          ['In progress', counts.progress, RotateCcw, ''],
-          ['Resolved / closed', counts.done, CheckCircle2, 'stat__icon--ok'],
-        ].map(([label, value, Icon, cls]) => (
-          <div className="card" key={label}>
-            <div className="stat">
-              <span className={`stat__icon ${cls}`}><Icon size={20} aria-hidden="true" /></span>
-              <div><p className="stat__label">{label}</p><p className="stat__value">{value}</p></div>
-            </div>
-          </div>
+        {[['Open / Assigned', counts.open, AlertTriangle,'stat__icon--warn'],['In Progress',counts.progress,Clock,''],['Resolved / Closed',counts.done,CheckCircle2,'stat__icon--ok']].map(([label,val,Icon,cls])=>(
+          <div className="card" key={label}><div className="stat"><span className={`stat__icon ${cls}`}><Icon size={20}/></span><div><p className="stat__label">{label}</p><p className="stat__value">{val}</p></div></div></div>
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="tabs" role="tablist" style={{ marginBottom: 0 }}>
-        {FILTERS.map((f) => (
-          <button key={f} role="tab" aria-selected={filter === f}
-            className={`tab ${filter === f ? 'tab--active' : ''}`} onClick={() => setFilter(f)}>
-            {f === 'Open' ? 'Open / Assigned' : f === 'Resolved' ? 'Resolved / Closed' : f}
-          </button>
-        ))}
+      {/* Filter tabs */}
+      <div className="tabs" style={{ marginBottom:0 }}>
+        {FILTERS.map(f=><button key={f} className={`tab ${filter===f?'tab--active':''}`} onClick={()=>setFilter(f)}>{f==='Open'?'Open / Assigned':f==='Resolved'?'Resolved / Closed':f}</button>)}
       </div>
 
-      {/* Ticket list */}
-      {visible.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: 40 }}>
-          <div style={{ fontSize: '2rem' }}>🛠️</div>
-          <h3 style={{ margin: '8px 0 4px' }}>No tickets here</h3>
-          <p className="muted small" style={{ margin: 0 }}>Nothing matches this filter. Spotted a problem? Create a ticket.</p>
-        </div>
-      ) : (
-        <div className="stack">
-          {visible.map((t) => {
-            const Icon = catIcon[t.category] ?? HelpCircle;
-            const expanded = openId === t.id;
+      {visible.length === 0
+        ? <EmptyState icon="🛠️" title="No tickets" description="Create a ticket to report a campus issue." action={<button className="btn btn--primary btn--sm" onClick={()=>setShowForm(true)}>Create Ticket</button>}/>
+        : <div className="stack">
+          {visible.map(t => {
+            const exp = openId===t.id;
             return (
-              <article key={t.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <button
-                  onClick={() => setOpenId(expanded ? null : t.id)} aria-expanded={expanded}
-                  style={{ all: 'unset', boxSizing: 'border-box', width: '100%', cursor: 'pointer', display: 'grid', gridTemplateColumns: '44px 1fr auto', gap: 14, alignItems: 'center', padding: '16px 20px' }}
-                >
-                  <span className="stat__icon"><Icon size={20} aria-hidden="true" /></span>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>{t.title}</div>
-                    <div className="muted small" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 2 }}>
-                      <span>{t.id}</span>
-                      <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><MapPin size={12} aria-hidden="true" />{t.building}, {t.room}</span>
-                      <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><Calendar size={12} aria-hidden="true" />{t.created}</span>
+              <article key={t.id} className="card" style={{ padding:0, overflow:'hidden' }}>
+                <button onClick={()=>toggleExpand(t.id)} aria-expanded={exp}
+                  style={{ all:'unset', boxSizing:'border-box', width:'100%', cursor:'pointer', display:'grid', gridTemplateColumns:'44px 1fr auto', gap:14, alignItems:'center', padding:'16px 20px' }}>
+                  <span className="stat__icon"><Wrench size={20}/></span>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontWeight:600 }}>{t.issue ?? t.title}</div>
+                    <div className="muted small" style={{ display:'flex', gap:14, flexWrap:'wrap', marginTop:2 }}>
+                      <span style={{ display:'inline-flex', gap:4, alignItems:'center' }}><MapPin size={12}/>{t.location}</span>
+                      <span style={{ display:'inline-flex', gap:4, alignItems:'center' }}><Calendar size={12}/>{t.created_at ? new Date(t.created_at).toLocaleDateString() : ''}</span>
+                      {t.reporter_name && <span style={{ display:'inline-flex', gap:4, alignItems:'center' }}><User size={12}/>{t.reporter_name}</span>}
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gap: 4, justifyItems: 'end' }}>
-                    <span className={statusBadge[t.status]}>{t.status}</span>
-                    <span className={prioBadge[t.priority]}>{t.priority}</span>
+                  <div style={{ display:'grid', gap:4, justifyItems:'end' }}>
+                    <span className={`badge ${statusBadge[t.status] ?? 'badge--next'}`}>{t.status}</span>
+                    <span className={`badge ${prioBadge[t.priority] ?? 'badge--next'}`}>{t.priority}</span>
                   </div>
                 </button>
+                {exp && (
+                  <div style={{ padding:'4px 20px 20px', borderTop:'1px solid var(--border)', background:'var(--surface2)' }}>
+                    <p style={{ margin:'12px 0', fontSize:'.9rem' }}>{t.issue ?? t.title}</p>
 
-                {expanded && (
-                  <div style={{ padding: '4px 20px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface2)' }}>
-                    <div style={{ padding: '18px 0 14px' }}><Tracker status={t.status} /></div>
-                    <p style={{ margin: '0 0 12px', fontSize: '.9rem' }}>{t.description}</p>
-                    <dl className="facts">
-                      <div><dt>Category</dt><dd>{t.category}</dd></div>
-                      <div><dt>Assigned to</dt>
-                        <dd style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                          <User size={14} aria-hidden="true" />{t.assignedTo ?? 'Not assigned yet'}
-                        </dd>
-                      </div>
-                      {t.hasPhoto && <div><dt>Photo</dt><dd style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><Camera size={14} aria-hidden="true" />Attached</dd></div>}
-                    </dl>
-                    {t.resolution && (
-                      <div style={{ marginTop: 12, padding: 12, borderRadius: 'var(--r)', background: 'var(--ok-bg)', color: 'var(--ok)', fontSize: '.88rem', display: 'flex', gap: 8 }}>
-                        <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: 2 }} aria-hidden="true" />
-                        <span><strong>Resolution: </strong>{t.resolution}</span>
+                    {/* Assigned staff */}
+                    {t.assigned_name && (
+                      <div style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 12px', borderRadius:'var(--r)', background:'var(--info-bg)', color:'var(--info)', fontSize:'.85rem', marginBottom:10 }}>
+                        <Wrench size={14}/> Assigned to <strong>{t.assigned_name}</strong>
                       </div>
                     )}
-                    {t.status === 'Resolved' && (
-                      <button className="btn btn--ghost btn--sm" style={{ marginTop: 12 }} onClick={() => reopen(t.id)}>
-                        <RotateCcw size={14} aria-hidden="true" /> Issue persists? Reopen
+
+                    {/* History timeline */}
+                    {detailLoading ? (
+                      <p className="muted small" style={{ padding:'8px 0' }}>Loading details…</p>
+                    ) : detail?.history && detail.history.length > 0 ? (
+                      <div style={{ marginTop:8 }}>
+                        <div className="muted small" style={{ display:'inline-flex', gap:6, alignItems:'center', marginBottom:6 }}>
+                          <History size={13}/> Status History
+                        </div>
+                        <div style={{ display:'grid', gap:6 }}>
+                          {detail.history.map((h, i) => (
+                            <div key={h.id ?? i} style={{ display:'flex', gap:10, alignItems:'flex-start', fontSize:'.82rem', padding:'4px 0' }}>
+                              <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--primary)', marginTop:5, flexShrink:0 }} />
+                              <div>
+                                <span style={{ fontWeight:500 }}>{h.new_status}</span>
+                                {h.old_status && <span className="muted"> from {h.old_status}</span>}
+                                {h.note && <span className="muted"> — {h.note}</span>}
+                                <div className="muted small" style={{ fontSize:'.76rem' }}>
+                                  {h.changed_by_name ?? 'System'} · {h.created_at ? new Date(h.created_at).toLocaleString() : ''}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : detail ? (
+                      <p className="muted small" style={{ padding:'8px 0' }}>No status history yet.</p>
+                    ) : null}
+
+                    {t.status==='resolved' && (
+                      <button className="btn btn--ghost btn--sm" onClick={()=>reopen(t.id)} style={{ marginTop:10 }}>
+                        <RotateCcw size={14}/> Issue persists? Reopen
                       </button>
                     )}
                   </div>
@@ -294,10 +219,9 @@ export default function Maintenance() {
             );
           })}
         </div>
-      )}
+      }
 
-      {showForm && <TicketModal onClose={() => setShowForm(false)} onSubmit={create} />}
-      <style>{`@media (max-width: 560px){ .form-2col{ grid-template-columns: 1fr !important; } }`}</style>
+      {showForm && <TicketModal onClose={()=>setShowForm(false)} onSubmit={create} busy={busy}/>}
     </div>
   );
 }

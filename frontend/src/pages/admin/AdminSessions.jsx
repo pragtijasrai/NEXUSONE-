@@ -1,81 +1,101 @@
-import { useState } from 'react';
-import { Search, Plus } from 'lucide-react';
+/**
+ * AdminSessions — /admin/sessions
+ * Real API: GET /admin/sessions (admin read-only)
+ */
+import { useState, useMemo } from 'react';
+import { Search, RefreshCw, Clock, MapPin, CalendarDays, User } from 'lucide-react';
+import { useApi } from '../../hooks/useApi.js';
+import { LoadingSpinner, ErrorState, EmptyState } from '../../components/common/ApiStates.jsx';
+import { getSessions } from '../../services/adminService.js';
 import AdminShell from './AdminShell.jsx';
 
-const SESSIONS = [
-  { date:'26 Oct', time:'10:00 AM', course:'CS-201', faculty:'Dr. A. Sharma',  room:'B-101', status:'Scheduled' },
-  { date:'26 Oct', time:'11:30 AM', course:'CS-301', faculty:'Prof. R. Mehta', room:'B-203', status:'Scheduled' },
-  { date:'26 Oct', time:'02:00 PM', course:'CS-135', faculty:'Dr. K. Verma',  room:'B-105', status:'Scheduled' },
-  { date:'26 Oct', time:'10:00 AM', course:'CS-421', faculty:'Prof. S. Gupta', room:'Lab-1', status:'Scheduled' },
-  { date:'27 Oct', time:'11:30 AM', course:'CS-335', faculty:'Dr. K. Verma',  room:'B-101', status:'Scheduled' },
-  { date:'27 Oct', time:'02:00 PM', course:'CS-201', faculty:'Dr. A. Sharma',  room:'B-203', status:'Scheduled' },
-  { date:'27 Oct', time:'04:00 PM', course:'CS-421', faculty:'Prof. R. Mehta', room:'B-101', status:'Scheduled' },
-  { date:'27 Oct', time:'10:00 AM', course:'CS-335', faculty:'Prof. S. Gupta', room:'B-203', status:'Scheduled' },
-];
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const fmt = (t) => {
+  if (!t) return '—';
+  const [h, m] = String(t).split(':').map(Number);
+  const ap = h >= 12 ? 'PM' : 'AM';
+  return `${((h+11)%12)+1}:${String(m).padStart(2,'0')} ${ap}`;
+};
 
 export default function AdminSessions() {
   const [search, setSearch] = useState('');
-  const [course, setCourse] = useState('All Courses');
-  const [week, setWeek] = useState('This Week');
+  const [day,    setDay]    = useState('all');
 
-  const filtered = SESSIONS.filter(s =>
-    (s.course.toLowerCase().includes(search.toLowerCase()) || s.faculty.toLowerCase().includes(search.toLowerCase())) &&
-    (course === 'All Courses' || s.course === course)
-  );
+  const { data, loading, error, refetch } = useApi(getSessions);
+  const sessions = data?.sessions ?? [];
+
+  const filtered = useMemo(() => sessions.filter(s => {
+    const q = search.toLowerCase();
+    const matchQ = !q || s.course_code?.toLowerCase().includes(q)
+      || s.course_name?.toLowerCase().includes(q)
+      || s.faculty_name?.toLowerCase().includes(q);
+    const matchD = day === 'all' || Number(s.day_of_week) === Number(day);
+    return matchQ && matchD;
+  }), [sessions, search, day]);
 
   return (
     <AdminShell>
       <div className="ap-hdr">
-        <div>
-          <h1>Class Sessions</h1>
-          <p className="ap-sub">Manage scheduled classes and lectures</p>
-        </div>
-        <button className="ap-btn ap-btn-primary"><Plus size={15} /> Add Session</button>
+        <div><h1>Class Sessions</h1><p className="ap-sub">All scheduled classes across courses</p></div>
+        <button className="ap-btn ap-btn-ghost ap-btn-sm" onClick={refetch}><RefreshCw size={13}/> Refresh</button>
+      </div>
+
+      <div className="ap-g4" style={{ marginBottom:18 }}>
+        {[
+          { icon:CalendarDays, label:'Total Sessions', val:sessions.length, color:'#818cf8', bg:'rgba(99,102,241,.15)' },
+          { icon:User,   label:'Faculty Involved',  val:new Set(sessions.map(s=>s.faculty_name)).size, color:'#22d3ee', bg:'rgba(34,211,238,.15)' },
+          { icon:MapPin, label:'Rooms Used',        val:new Set(sessions.map(s=>s.room_code).filter(Boolean)).size, color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
+          { icon:Clock,  label:'Unique Courses',    val:new Set(sessions.map(s=>s.course_code)).size, color:'#34d399', bg:'rgba(52,211,153,.15)' },
+        ].map(c => (
+          <div key={c.label} className="ap-card" style={{ display:'flex', alignItems:'center', gap:14 }}>
+            <div style={{ width:42, height:42, borderRadius:11, background:c.bg, display:'grid', placeItems:'center' }}><c.icon size={19} color={c.color}/></div>
+            <div>
+              <div style={{ fontSize:'1.4rem', fontWeight:800, color:'#eceefb', lineHeight:1 }}>{c.val}</div>
+              <div style={{ fontSize:'.76rem', color:'#7880a8' }}>{c.label}</div>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="ap-card">
         <div className="ap-bar">
-          <div className="ap-search">
-            <Search size={14} color="#7880a8" />
-            <input placeholder="Search sessions..." value={search} onChange={e=>setSearch(e.target.value)} />
+          <div className="ap-search" style={{ maxWidth:340 }}>
+            <Search size={14} color="#7880a8"/>
+            <input placeholder="Search course, faculty…" value={search} onChange={e=>setSearch(e.target.value)}/>
           </div>
-          <select className="ap-select" value={course} onChange={e=>setCourse(e.target.value)}>
-            <option>All Courses</option>
-            {[...new Set(SESSIONS.map(s=>s.course))].map(c=><option key={c}>{c}</option>)}
+          <select className="ap-select" value={day} onChange={e=>setDay(e.target.value)}>
+            <option value="all">All Days</option>
+            {[1,2,3,4,5].map(d => <option key={d} value={d}>{DAYS[d]}</option>)}
           </select>
-          <select className="ap-select" value={week} onChange={e=>setWeek(e.target.value)}>
-            <option>This Week</option><option>Next Week</option><option>This Month</option>
-          </select>
+          <span style={{ fontSize:'.82rem', color:'#7880a8', marginLeft:'auto' }}>{filtered.length} of {sessions.length}</span>
         </div>
 
-        <div className="ap-table-wrap">
-          <table className="ap-table">
-            <thead>
-              <tr><th>Date</th><th>Time</th><th>Course</th><th>Faculty</th><th>Room</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {filtered.map((s,i)=>(
-                <tr key={i}>
-                  <td style={{ color:'#c5caf0' }}>{s.date}</td>
-                  <td style={{ color:'#c5caf0' }}>{s.time}</td>
-                  <td><span className="ap-badge ap-badge-blue">{s.course}</span></td>
-                  <td style={{ color:'#eceefb', fontWeight:500 }}>{s.faculty}</td>
-                  <td style={{ color:'#c5caf0' }}>{s.room}</td>
-                  <td>
-                    <div style={{ display:'flex', gap:6 }}>
-                      <button className="ap-btn ap-btn-ghost ap-btn-sm">Edit</button>
-                      <button className="ap-btn ap-btn-danger ap-btn-sm">Cancel</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="ap-pages">
-          <span className="ap-page-info">Showing 1–{filtered.length} of 56 sessions</span>
-          {[1,2,3,4,'...'].map((p,i)=><button key={i} className={`ap-page ${p===1?'ap-page-active':''}`}>{p}</button>)}
-        </div>
+        {loading ? <LoadingSpinner message="Loading sessions…"/>
+        : error   ? <ErrorState error={error} onRetry={refetch}/>
+        : filtered.length === 0 ? <EmptyState icon="📅" title="No sessions found" description="No sessions match your filter."/>
+        : (
+          <div className="ap-table-wrap">
+            <table className="ap-table">
+              <thead>
+                <tr><th>Day</th><th>Time</th><th>Course</th><th>Faculty</th><th>Room</th></tr>
+              </thead>
+              <tbody>
+                {filtered.map(s => (
+                  <tr key={s.id}>
+                    <td><span className="ap-badge ap-badge-blue">{DAYS[Number(s.day_of_week)]}</span></td>
+                    <td style={{ color:'#c5caf0' }}>{fmt(s.start_time)} – {fmt(s.end_time)}</td>
+                    <td>
+                      <div style={{ fontWeight:600, color:'#eceefb', fontSize:'.85rem' }}>{s.course_code}</div>
+                      <div style={{ fontSize:'.76rem', color:'#7880a8' }}>{s.course_name}</div>
+                    </td>
+                    <td style={{ color:'#c5caf0' }}>{s.faculty_name}</td>
+                    <td style={{ color:'#7880a8' }}>{s.room_name ?? s.room_code ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </AdminShell>
   );

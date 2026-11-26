@@ -1,101 +1,65 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Bell, CheckCheck, Megaphone, DoorOpen, FileText, CalendarDays, Wrench, Bus,
-  Trash2, ArrowRight,
-} from 'lucide-react';
+import { Bell, CheckCheck, Trash2, ArrowRight } from 'lucide-react';
+import { useApi } from '../../hooks/useApi.js';
 import { useToast } from '../../context/ToastContext.jsx';
-import {
-  CATEGORIES, CATEGORY_ROUTES, initialNotifications,
-} from '../../data/mockNotifications.js';
+import { LoadingSpinner, ErrorState, EmptyState } from '../../components/common/ApiStates.jsx';
+import * as ns from '../../services/notificationService.js';
 
-/* ───────── helpers ───────── */
-const catIcon = {
-  Announcements: Megaphone, Bookings: DoorOpen, Assignments: FileText,
-  Events: CalendarDays, Maintenance: Wrench, Transport: Bus,
-};
-const catColor = {
-  Announcements: '#dc2626', Bookings: '#4338ca', Assignments: '#f59e0b',
-  Events: '#ec4899', Maintenance: '#0ea5e9', Transport: '#10b981',
-};
+const catColor = { info:'#4338ca', success:'#059669', warning:'#d97706', error:'#dc2626' };
+const catRoute = { info:'/student/dashboard', success:'/student/dashboard', warning:'/student/announcements', error:'/student/dashboard' };
 
-function timeAgo(mins) {
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins} min ago`;
-  const h = Math.floor(mins / 60);
-  if (h < 24) return `${h} hour${h > 1 ? 's' : ''} ago`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? 'Yesterday' : `${d} days ago`;
-}
-
-/* ───────── page ───────── */
 export default function Notifications() {
   const navigate = useNavigate();
   const { notify } = useToast();
-  const [items, setItems] = useState(initialNotifications);
-  const [cat, setCat] = useState('All');
   const [unreadOnly, setUnreadOnly] = useState(false);
 
-  const unreadCount = items.filter((n) => n.unread).length;
-
-  const visible = useMemo(
-    () => items.filter((n) => (cat === 'All' || n.category === cat) && (!unreadOnly || n.unread)),
-    [items, cat, unreadOnly],
+  const { data, loading, error, refetch } = useApi(
+    () => ns.getNotifications(unreadOnly ? { unread:'true' } : {}),
+    [unreadOnly],
   );
 
-  // group into Today (< 24h) and Earlier
-  const today = visible.filter((n) => n.ago < 1440);
-  const earlier = visible.filter((n) => n.ago >= 1440);
+  const notifications = data?.rows ?? [];
+  const unreadCount   = data?.unreadCount ?? 0;
 
-  const open = (n) => {
-    setItems((p) => p.map((x) => (x.id === n.id ? { ...x, unread: false } : x)));
-    navigate(CATEGORY_ROUTES[n.category]);
+  const open = async (n) => {
+    if (n.is_read === false) {
+      try { await ns.markRead(n.id); refetch(); } catch { /* ignore */ }
+    }
+    navigate(catRoute[n.type] ?? '/student/dashboard');
   };
 
-  const toggleRead = (id) =>
-    setItems((p) => p.map((x) => (x.id === id ? { ...x, unread: !x.unread } : x)));
-
-  const markAll = () => {
-    if (!unreadCount) return;
-    setItems((p) => p.map((x) => ({ ...x, unread: false })));
-    notify('All notifications marked as read.', 'info');
+  const handleMarkAll = async () => {
+    try { await ns.markAllRead(); refetch(); notify('All notifications marked as read.', 'info'); } catch (e) { notify(e.message, 'error'); }
   };
 
-  const clearRead = () => {
-    const n = items.filter((x) => !x.unread).length;
-    if (!n) return;
-    setItems((p) => p.filter((x) => x.unread));
-    notify(`Cleared ${n} read notification${n > 1 ? 's' : ''}.`, 'info');
-  };
+  if (loading) return <LoadingSpinner message="Loading notifications…" />;
+  if (error)   return <ErrorState error={error} onRetry={refetch} />;
 
-  const renderGroup = (label, list) => list.length > 0 && (
-    <section key={label} aria-label={label}>
-      <h2 style={{ fontSize: '.78rem', textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--muted)', margin: '0 0 8px' }}>{label}</h2>
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+  const today   = notifications.filter(n => !n.is_read);
+  const earlier = notifications.filter(n => n.is_read);
+
+  const Group = ({ label, list }) => list.length === 0 ? null : (
+    <section>
+      <h2 style={{ fontSize:'.78rem', textTransform:'uppercase', letterSpacing:'.05em', color:'var(--muted)', margin:'0 0 8px' }}>{label}</h2>
+      <div className="card" style={{ padding:0, overflow:'hidden' }}>
         {list.map((n, i) => {
-          const Icon = catIcon[n.category] ?? Bell;
-          const color = catColor[n.category] ?? 'var(--primary)';
+          const color = catColor[n.type] ?? 'var(--primary)';
           return (
-            <div key={n.id}
-              style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', borderTop: i ? '1px solid var(--border)' : 0, background: n.unread ? 'rgba(99,102,241,.06)' : 'transparent' }}>
-              <button onClick={() => open(n)} aria-label={`${n.title}. Open ${n.category}`}
-                style={{ all: 'unset', boxSizing: 'border-box', cursor: 'pointer', display: 'grid', gridTemplateColumns: '44px 1fr', gap: 14, alignItems: 'center', padding: '14px 16px 14px 20px', minWidth: 0 }}>
-                <span className="stat__icon" style={{ background: `${color}1a`, color }}><Icon size={20} aria-hidden="true" /></span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {n.unread && <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)', flexShrink: 0 }} />}
-                    <span style={{ fontWeight: n.unread ? 700 : 500 }}>{n.title}</span>
+            <div key={n.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', alignItems:'center', borderTop:i?'1px solid var(--border)':0, background:!n.is_read?'rgba(99,102,241,.06)':'transparent' }}>
+              <button onClick={()=>open(n)} style={{ all:'unset', boxSizing:'border-box', cursor:'pointer', display:'grid', gridTemplateColumns:'44px 1fr', gap:14, alignItems:'center', padding:'14px 16px' }}>
+                <span className="stat__icon" style={{ background:`${color}1a`, color }}><Bell size={20}/></span>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    {!n.is_read && <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--primary)', flexShrink:0 }}/>}
+                    <span style={{ fontWeight:!n.is_read?700:500 }}>{n.title}</span>
                   </div>
-                  <div className="muted small" style={{ marginTop: 2 }}>{n.message}</div>
-                  <div className="muted" style={{ fontSize: '.72rem', marginTop: 4, display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <span style={{ color, fontWeight: 600 }}>{n.category}</span>
-                    <span>{timeAgo(n.ago)}</span>
-                    <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>Open <ArrowRight size={11} aria-hidden="true" /></span>
+                  <div className="muted small" style={{ marginTop:2 }}>{n.body}</div>
+                  <div className="muted" style={{ fontSize:'.72rem', marginTop:4, display:'flex', gap:10 }}>
+                    <span style={{ color, fontWeight:600 }}>{n.type}</span>
+                    <span style={{ display:'inline-flex', gap:3, alignItems:'center' }}>Open <ArrowRight size={11}/></span>
                   </div>
                 </div>
-              </button>
-              <button className="btn btn--ghost btn--sm" style={{ margin: '0 16px' }} onClick={() => toggleRead(n.id)}>
-                {n.unread ? 'Mark read' : 'Mark unread'}
               </button>
             </div>
           );
@@ -106,64 +70,29 @@ export default function Notifications() {
 
   return (
     <div className="stack">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+      <header style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:12 }}>
         <div>
           <h1>Notifications</h1>
-          <p className="muted">
-            Updates that need your attention.{' '}
-            {unreadCount > 0 ? <strong>{unreadCount} unread</strong> : 'You are all caught up.'}
-          </p>
+          <p className="muted">{unreadCount > 0 ? <strong>{unreadCount} unread</strong> : 'All caught up.'}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn btn--ghost" onClick={clearRead} disabled={items.every((n) => n.unread)}>
-            <Trash2 size={16} aria-hidden="true" /> Clear read
-          </button>
-          <button className="btn btn--primary" onClick={markAll} disabled={unreadCount === 0}>
-            <CheckCheck size={16} aria-hidden="true" /> Mark all as read
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          <label style={{ display:'inline-flex', gap:8, alignItems:'center', fontSize:'.85rem', cursor:'pointer' }}>
+            <input type="checkbox" checked={unreadOnly} onChange={e=>setUnreadOnly(e.target.checked)}/>
+            Unread only
+          </label>
+          <button className="btn btn--primary" onClick={handleMarkAll} disabled={unreadCount===0}>
+            <CheckCheck size={16}/> Mark all as read
           </button>
         </div>
       </header>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div role="group" aria-label="Filter by category" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flex: 1 }}>
-          {['All', ...CATEGORIES].map((c) => {
-            const active = cat === c;
-            const color = catColor[c] ?? 'var(--primary)';
-            return (
-              <button key={c} aria-pressed={active} onClick={() => setCat(c)}
-                style={{
-                  font: 'inherit', fontSize: '.8rem', fontWeight: 600, cursor: 'pointer',
-                  padding: '6px 14px', borderRadius: 99,
-                  border: `1.5px solid ${active ? color : 'var(--border)'}`,
-                  background: active ? color : 'var(--surface)',
-                  color: active ? '#fff' : 'var(--text2)',
-                }}>{c}</button>
-            );
-          })}
-        </div>
-        <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center', fontSize: '.85rem', fontWeight: 500, cursor: 'pointer' }}>
-          <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
-          Unread only
-        </label>
-      </div>
-
-      {visible.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: 40 }}>
-          <div style={{ fontSize: '2rem' }}>🔔</div>
-          <h3 style={{ margin: '8px 0 4px' }}>No notifications</h3>
-          <p className="muted small" style={{ margin: 0 }}>
-            {unreadOnly ? 'No unread notifications in this view.' : 'Nothing here yet. New updates will appear in this list.'}
-          </p>
-        </div>
-      ) : (
-        <>
-          {renderGroup('Today', today)}
-          {renderGroup('Earlier', earlier)}
+      {notifications.length === 0
+        ? <EmptyState icon="🔔" title="No notifications" description={unreadOnly ? 'No unread notifications.' : 'Nothing here yet.'}/>
+        : <>
+          <Group label="Unread" list={today}/>
+          <Group label="Read" list={earlier}/>
         </>
-      )}
-
-      <style>{`@media (max-width: 560px){ section[aria-label] .card > div{ grid-template-columns: 1fr !important; } section[aria-label] .card > div > .btn{ margin: 0 20px 12px !important; justify-self: start; } }`}</style>
+      }
     </div>
   );
 }

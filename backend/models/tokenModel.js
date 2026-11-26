@@ -1,19 +1,7 @@
 /**
- * Token model — refresh tokens stored in the database.
+ * Token model — refresh tokens + password reset tokens.
  *
- * Why store refresh tokens in the DB instead of just using long-lived JWTs?
- *   - A JWT cannot be invalidated before it expires (it's stateless).
- *   - Storing a hash of the refresh token lets us revoke it immediately
- *     (on logout, on password change, on suspicious activity).
- *   - We store a HASH (SHA-256), not the raw token — so even if the
- *     database is compromised, the raw tokens are not exposed.
- *
- * The actual refresh token is a random 48-byte hex string generated in
- * authService.js and sent to the client once. We never store the raw token.
- *
- * Syllabus:
- *   - JWT / token security (Syllabus D)
- *   - Parameterized SQL (Syllabus D & H)
+ * Both token types store a SHA-256 hash — raw tokens are never persisted.
  */
 
 import { createHash } from 'crypto';
@@ -21,6 +9,8 @@ import { query } from '../config/db.js';
 
 /** Hash a raw token before storing/looking up — we never store raw tokens */
 export const hashToken = (raw) => createHash('sha256').update(raw).digest('hex');
+
+/* ── Refresh tokens ── */
 
 export const create = async ({ userId, raw, expiresAt }) =>
   (await query(
@@ -46,7 +36,6 @@ export const revoke = async (raw) =>
     [hashToken(raw)],
   );
 
-/** Revoke all refresh tokens for a user — used on password change or logout-all */
 export const revokeAll = async (userId) =>
   query(
     `UPDATE refresh_tokens SET revoked_at = now()
@@ -54,6 +43,43 @@ export const revokeAll = async (userId) =>
     [userId],
   );
 
-/** Clean up expired tokens — can be run by a scheduled job */
 export const purgeExpired = async () =>
   query(`DELETE FROM refresh_tokens WHERE expires_at < now()`);
+
+/* ── Password reset tokens ── */
+
+export const createResetToken = async ({ userId, raw, expiresAt }) =>
+  (await query(
+    `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+     VALUES ($1, $2, $3) RETURNING id`,
+    [userId, hashToken(raw), expiresAt],
+  )).rows[0];
+
+/**
+ * Find a valid, unused, non-expired reset token.
+ * Returns the row (including user_id) or undefined.
+ */
+export const findValidResetToken = async (raw) =>
+  (await query(
+    `SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at
+     FROM password_reset_tokens prt
+     WHERE prt.token_hash = $1
+       AND prt.used_at    IS NULL
+       AND prt.expires_at > now()`,
+    [hashToken(raw)],
+  )).rows[0];
+
+/** Mark a reset token as used (single-use guarantee) */
+export const markResetTokenUsed = async (id) =>
+  query(
+    `UPDATE password_reset_tokens SET used_at = now() WHERE id = $1`,
+    [id],
+  );
+
+/** Revoke all unused reset tokens for a user (e.g., after successful reset) */
+export const revokeAllResetTokens = async (userId) =>
+  query(
+    `UPDATE password_reset_tokens SET used_at = now()
+     WHERE user_id = $1 AND used_at IS NULL`,
+    [userId],
+  );
