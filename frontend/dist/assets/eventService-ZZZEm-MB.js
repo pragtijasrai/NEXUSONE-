@@ -1,0 +1,1 @@
+import{a as n}from"./index-FpIQGPKb.js";const a=(e={})=>{const t=new URLSearchParams(e).toString();return n(`/events${t?"?"+t:""}`).then(s=>s.data)},o=e=>n(`/events/${e}/register`,{method:"POST"}),v=e=>n(`/events/${e}/register`,{method:"DELETE"}),c=e=>n("/events",{method:"POST",body:e}).then(t=>t.data.event);export{c,a as g,o as r,v as u};

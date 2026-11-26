@@ -1,0 +1,1 @@
+import{a as t}from"./index-FpIQGPKb.js";const n=()=>t("/dashboard/student").then(a=>a.data),s=()=>t("/dashboard/faculty").then(a=>a.data),e=()=>t("/dashboard/admin").then(a=>a.data),o=()=>t("/dashboard/maintenance").then(a=>a.data);export{s as a,e as b,o as c,n as g};

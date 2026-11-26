@@ -1,0 +1,1 @@
+import{a as t}from"./index-FpIQGPKb.js";const s=(a={})=>{const o=new URLSearchParams(a).toString();return t(`/notifications${o?"?"+o:""}`).then(i=>i.data)},e=a=>t(`/notifications/${a}/read`,{method:"PATCH"}),r=()=>t("/notifications/read-all",{method:"PATCH"});export{e as a,s as g,r as m};
