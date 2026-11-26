@@ -5,18 +5,19 @@
  *   1. authLimiter — strict, applies to login/register/password-reset
  *   2. apiLimiter  — general, applies to all other API routes
  *
- * Rate limiting prevents brute-force password guessing and API abuse.
- * The window and max values are conservative for a university project.
- *
- * Syllabus: Security — rate limiting (Syllabus D & H)
+ * Production values are more conservative than development.
+ * Tests run with high limits (1000) so they don't hit rate limit errors.
  */
 
 import rateLimit from 'express-rate-limit';
+import { isProd, isTest } from '../config/env.js';
 
-/* Strict limiter for auth endpoints: 5 requests per 15 minutes per IP */
+const isTestOrDev = isTest || !isProd;
+
+/* Auth endpoints: 5 requests per 15 min in production, 1000 in test/dev */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development' ? 1000 : 5,
+  max: isTestOrDev ? 1000 : 5,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -26,10 +27,10 @@ export const authLimiter = rateLimit({
   },
 });
 
-/* General API limiter: 100 requests per 15 minutes per IP */
+/* General API: 100 requests per 15 min in production, unlimited in test/dev */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: isTestOrDev ? 10000 : 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

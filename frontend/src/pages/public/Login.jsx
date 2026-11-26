@@ -146,9 +146,9 @@ export default function Login() {
             </label>
 
             <div style={{ textAlign: 'right', marginTop: -8, marginBottom: 20 }}>
-              <span style={{ fontSize: '.82rem', color: 'var(--muted)' }}>
-                Forgot password? Contact your IT administrator.
-              </span>
+              <Link to="/forgot-password" style={{ fontSize: '.82rem', color: 'var(--primary)', textDecoration: 'none' }}>
+                Forgot password?
+              </Link>
             </div>
 
             <button

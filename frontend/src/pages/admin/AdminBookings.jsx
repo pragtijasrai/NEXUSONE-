@@ -1,92 +1,135 @@
-import { useState } from 'react';
-import { Search, Plus } from 'lucide-react';
+/**
+ * AdminBookings — /admin/bookings
+ * Real API: GET /bookings (admin — all bookings), PATCH /bookings/:id/admin-cancel
+ */
+import { useState, useCallback } from 'react';
+import { Search, RefreshCw, XCircle } from 'lucide-react';
+import { useApi } from '../../hooks/useApi.js';
+import { useToast } from '../../context/ToastContext.jsx';
+import { LoadingSpinner, ErrorState, EmptyState } from '../../components/common/ApiStates.jsx';
+import { getAllBookings, cancelBooking } from '../../services/adminService.js';
 import AdminShell from './AdminShell.jsx';
 
-const BOOKINGS = [
-  { date:'26 Oct', time:'10:00 AM', room:'R-101', course:'CS-201', bookedBy:'Dr. A. Sharma', type:'Admin',    status:'Approved'  },
-  { date:'26 Oct', time:'11:30 AM', room:'R-203', course:'CS-305', bookedBy:'Prof. R. Mehta', type:'Faculty',  status:'Approved'  },
-  { date:'26 Oct', time:'02:00 PM', room:'Lab-1', course:'Workshop',bookedBy:'Simran Kaur',  type:'Student',  status:'Pending'   },
-  { date:'25 Oct', time:'10:00 AM', room:'R-101', course:'CS-335', bookedBy:'Dr. K. Verma',  type:'Faculty',  status:'Approved'  },
-  { date:'25 Oct', time:'11:30 AM', room:'R-203', course:'Project', bookedBy:'Rohan Mehta',  type:'Student',  status:'Rejected'  },
-  { date:'25 Oct', time:'04:00 PM', room:'R-203', course:'Guest Lecture', bookedBy:'Admin', type:'Admin', status:'Approved'  },
-  { date:'24 Oct', time:'02:00 PM', room:'R-203', course:'CS-101', bookedBy:'Neha Gupta',    type:'Student',  status:'Approved'  },
-  { date:'24 Oct', time:'11:30 AM', room:'R-101', course:'Seminar', bookedBy:'Prof. S. Gupta',type:'Faculty', status:'Approved'  },
-];
-
-const statusBadge = { Approved:'ap-badge-green', Pending:'ap-badge-yellow', Rejected:'ap-badge-red' };
-const typeBadge   = { Admin:'ap-badge-yellow', Faculty:'ap-badge-cyan', Student:'ap-badge-blue' };
+const STATUS_BADGE = { confirmed:'ap-badge-green', pending:'ap-badge-yellow', cancelled:'ap-badge-red' };
+const fmtDt = (dt) => dt ? new Date(dt).toLocaleString([],{dateStyle:'short',timeStyle:'short'}) : '—';
 
 export default function AdminBookings() {
-  const [tab, setTab]    = useState('All Bookings');
+  const { notify } = useToast();
+  const [tab,    setTab]    = useState('all');
   const [search, setSearch] = useState('');
-  const [month, setMonth]  = useState('This Month');
-  const [status, setStatus] = useState('All Status');
-  const tabs = ['All Bookings', 'Pending', 'Approved', 'Rejected'];
+  const [page,   setPage]   = useState(1);
 
-  const filtered = BOOKINGS.filter(b => {
-    const matchTab    = tab === 'All Bookings' || b.status === tab;
-    const matchStatus = status === 'All Status' || b.status === status;
-    const matchSearch = b.room.toLowerCase().includes(search.toLowerCase()) ||
-                        b.bookedBy.toLowerCase().includes(search.toLowerCase()) ||
-                        b.course.toLowerCase().includes(search.toLowerCase());
-    return matchTab && matchStatus && matchSearch;
-  });
+  const statusFilter = { confirmed:'confirmed', pending:'pending', cancelled:'cancelled' }[tab];
+  const fetchFn = useCallback(() => getAllBookings({
+    page, limit: 20,
+    ...(statusFilter ? { status: statusFilter } : {}),
+    ...(search ? { search } : {}),
+  }), [page, statusFilter, search]);
+
+  const { data, loading, error, refetch } = useApi(fetchFn, [page, tab, search]);
+  const bookings = data?.rows ?? [];
+  const meta     = data ?? {};
+
+  async function handleCancel(b) {
+    if (!window.confirm(`Cancel booking for "${b.room_name}" by ${b.user_name}?`)) return;
+    try {
+      await cancelBooking(b.id);
+      notify('Booking cancelled.', 'info');
+      refetch();
+    } catch (e) { notify(e.message || 'Cancel failed', 'error'); }
+  }
+
+  const TABS = [
+    { k:'all',       l:`All (${meta.total ?? '…'})` },
+    { k:'confirmed', l:'Confirmed' },
+    { k:'pending',   l:'Pending' },
+    { k:'cancelled', l:'Cancelled' },
+  ];
 
   return (
     <AdminShell>
       <div className="ap-hdr">
-        <div>
-          <h1>Room Bookings</h1>
-          <p className="ap-sub">Manage room bookings and reservations</p>
-        </div>
-        <button className="ap-btn ap-btn-primary"><Plus size={15} /> New Booking</button>
+        <div><h1>Room Bookings</h1><p className="ap-sub">Manage all room reservations campus-wide</p></div>
+        <button className="ap-btn ap-btn-ghost ap-btn-sm" onClick={refetch}><RefreshCw size={13}/> Refresh</button>
       </div>
 
       <div className="ap-card">
         <div className="ap-tabs">
-          {tabs.map(t=>(
-            <button key={t} className={`ap-tab ${tab===t?'ap-tab-active':''}`} onClick={()=>setTab(t)}>{t}</button>
+          {TABS.map(t => (
+            <button key={t.k} className={`ap-tab ${tab===t.k?'ap-tab-active':''}`}
+              onClick={() => { setTab(t.k); setPage(1); }}>{t.l}</button>
           ))}
         </div>
 
         <div className="ap-bar">
-          <div className="ap-search">
-            <Search size={14} color="#7880a8" />
-            <input placeholder="Search bookings..." value={search} onChange={e=>setSearch(e.target.value)} />
+          <div className="ap-search" style={{ maxWidth:360 }}>
+            <Search size={14} color="#7880a8"/>
+            <input placeholder="Search room, user, purpose…" value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}/>
           </div>
-          <select className="ap-select" value={month} onChange={e=>setMonth(e.target.value)}>
-            <option>This Month</option><option>Last Month</option><option>This Year</option>
-          </select>
-          <select className="ap-select" value={status} onChange={e=>setStatus(e.target.value)}>
-            <option>All Status</option><option>Approved</option><option>Pending</option><option>Rejected</option>
-          </select>
+          <span style={{ fontSize:'.82rem', color:'#7880a8', marginLeft:'auto' }}>
+            {meta.total != null ? `${meta.total} bookings` : ''}
+          </span>
         </div>
 
-        <div className="ap-table-wrap">
-          <table className="ap-table">
-            <thead>
-              <tr><th>Date</th><th>Time</th><th>Room</th><th>Purpose</th><th>Booked By</th><th>Type</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              {filtered.map((b,i)=>(
-                <tr key={i}>
-                  <td style={{ color:'#c5caf0' }}>{b.date}</td>
-                  <td style={{ color:'#c5caf0' }}>{b.time}</td>
-                  <td><span className="ap-badge ap-badge-blue">{b.room}</span></td>
-                  <td style={{ color:'#eceefb' }}>{b.course}</td>
-                  <td style={{ color:'#c5caf0' }}>{b.bookedBy}</td>
-                  <td><span className={`ap-badge ${typeBadge[b.type]}`}>{b.type}</span></td>
-                  <td><span className={`ap-badge ${statusBadge[b.status]}`}>{b.status}</span></td>
-                </tr>
+        {loading ? <LoadingSpinner message="Loading bookings…"/>
+        : error   ? <ErrorState error={error} onRetry={refetch}/>
+        : bookings.length === 0
+          ? <EmptyState icon="📅" title="No bookings found" description="Try a different filter or search."/>
+        : (
+          <>
+            <div className="ap-table-wrap">
+              <table className="ap-table">
+                <thead>
+                  <tr>
+                    <th>Room</th>
+                    <th>Booked By</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Purpose</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookings.map(b => (
+                    <tr key={b.id}>
+                      <td>
+                        <div style={{ fontWeight:600, color:'#eceefb' }}>{b.room_name ?? b.room_code}</div>
+                        <div style={{ fontSize:'.76rem', color:'#7880a8' }}>{b.building}</div>
+                      </td>
+                      <td>
+                        <div style={{ color:'#eceefb' }}>{b.user_name}</div>
+                        <div style={{ fontSize:'.76rem', color:'#7880a8' }}>{b.user_role}</div>
+                      </td>
+                      <td style={{ color:'#c5caf0', fontSize:'.83rem' }}>{fmtDt(b.start_time)}</td>
+                      <td style={{ color:'#c5caf0', fontSize:'.83rem' }}>{fmtDt(b.end_time)}</td>
+                      <td style={{ color:'#7880a8', fontSize:'.83rem' }}>{b.purpose ?? '—'}</td>
+                      <td>
+                        <span className={`ap-badge ${STATUS_BADGE[b.status]??'ap-badge-gray'}`}>{b.status}</span>
+                      </td>
+                      <td>
+                        {b.status !== 'cancelled' && (
+                          <button className="ap-btn ap-btn-danger ap-btn-sm" onClick={() => handleCancel(b)}>
+                            <XCircle size={13}/> Cancel
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="ap-pages">
+              <span className="ap-page-info">
+                Showing {(page-1)*20+1}–{Math.min(page*20, meta.total??bookings.length)} of {meta.total??bookings.length}
+              </span>
+              {Array.from({length: meta.totalPages??1}, (_,i)=>i+1).map(p => (
+                <button key={p} className={`ap-page ${p===page?'ap-page-active':''}`} onClick={()=>setPage(p)}>{p}</button>
               ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="ap-pages">
-          <span className="ap-page-info">Showing 1–{filtered.length} of 28 bookings</span>
-          {[1,2,3,4,'...'].map((p,i)=><button key={i} className={`ap-page ${p===1?'ap-page-active':''}`}>{p}</button>)}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </AdminShell>
   );

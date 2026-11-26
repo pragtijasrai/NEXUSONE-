@@ -5,17 +5,19 @@
 import { Link } from 'react-router-dom';
 import {
   BookOpen, Users, FileText, Megaphone, ArrowRight,
-  TrendingUp, ClipboardList, Plus, UserCheck, DoorOpen,
+  TrendingUp, ClipboardList, Plus, UserCheck, DoorOpen, RefreshCw,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis,
 } from 'recharts';
 import { useAuth } from '../../context/AuthContext.jsx';
-import {
-  facultyClasses, facultyAssignments, myStudents,
-  attendanceSummary, weeklyAttendance, facultyAnnouncements,
-} from '../../data/mockFaculty.js';
+import { useApi } from '../../hooks/useApi.js';
+import { getFacultyDashboard } from '../../services/dashboardService.js';
+import { getAnnouncements } from '../../services/announcementService.js';
+import { getFacultyCourses, getAssignments, getAttendanceSummary } from '../../services/facultyService.js';
+/* Keep chart shapes from mock for now — API has summary data */
+import { weeklyAttendance } from '../../data/mockFaculty.js';
 
 /* ─── CSS ─── */
 const css = `
@@ -139,10 +141,57 @@ const TOOLTIP_STYLE = {
 
 export default function FacultyDashboard() {
   const { user } = useAuth();
-  const firstName   = user.name.split(' ').filter(p => !p.endsWith('.')).find(Boolean) ?? user.name.split(' ')[0];
-  const totalStudents = myStudents.length;
-  const pending       = facultyAssignments.reduce((s, a) => s + (a.submitted - a.graded), 0);
+  const firstName = user?.name?.split(' ').filter(p => !p.endsWith('.')).find(Boolean) ?? user?.name?.split(' ')[0] ?? 'Faculty';
+
+  const { data: dashData, loading, error, refetch } = useApi(getFacultyDashboard);
+  const { data: annData } = useApi(getAnnouncements);
+  const { data: coursesData } = useApi(getFacultyCourses);
+  const { data: assignData } = useApi(getAssignments);
+  const { data: attSummary } = useApi(getAttendanceSummary);
+
+  const d = dashData ?? {};
+  const bookings      = d.upcomingBookings ?? [];
+  const announcements = d.announcements ?? annData?.rows ?? [];
+  const stats         = d.stats ?? {};
+  const courses       = coursesData?.courses ?? [];
+  const assignments   = Array.isArray(assignData) ? assignData : [];
+
+  /* Build real attendance summary from API */
+  const attendanceSummary = Array.isArray(attSummary) ? [
+    { name: 'Present',  value: attSummary.reduce((s,x)=>s+x.present,0),  color: '#059669' },
+    { name: 'Absent',   value: attSummary.reduce((s,x)=>s+x.absent,0),   color: '#dc2626' },
+    { name: 'On Leave', value: attSummary.reduce((s,x)=>s+x.on_leave,0), color: '#d97706' },
+  ] : [
+    { name: 'Present',  value: 128, color: '#059669' },
+    { name: 'Absent',   value: 18,  color: '#dc2626' },
+    { name: 'On Leave', value: 6,   color: '#d97706' },
+  ];
+
+  const totalClasses  = courses.length;
+  const totalStudents = Number(stats.total_students ?? 0);
+  const upcoming      = Number(stats.upcoming_events ?? 0);
   const totalAttend   = attendanceSummary.reduce((s, d) => s + d.value, 0);
+
+  if (loading) return (
+    <><style>{css}</style>
+    <div className="fd" style={{ display:'grid', placeItems:'center', minHeight:300 }}>
+      <div style={{ textAlign:'center', color:'#7880a8', display:'grid', gap:14 }}>
+        <div style={{ width:36, height:36, border:'3px solid rgba(255,255,255,.1)', borderTopColor:'#818cf8', borderRadius:'50%', animation:'nexus-spin .7s linear infinite', margin:'0 auto' }}/>
+        <span>Loading…</span>
+        <style>{`@keyframes nexus-spin{to{transform:rotate(360deg)}}`}</style>
+      </div>
+    </div></>
+  );
+
+  if (error) return (
+    <><style>{css}</style>
+    <div className="fd" style={{ display:'grid', placeItems:'center', minHeight:300 }}>
+      <div style={{ textAlign:'center', color:'#f87171' }}>
+        <p>{error.message}</p>
+        <button onClick={refetch} style={{ background:'#4338ca', color:'#fff', border:0, borderRadius:9, padding:'8px 20px', cursor:'pointer', fontWeight:600 }}>Retry</button>
+      </div>
+    </div></>
+  );
 
   return (
     <>
@@ -156,6 +205,7 @@ export default function FacultyDashboard() {
             <p>Here's an overview of your teaching activities.</p>
           </div>
           <div className="fd-header-actions">
+            <button className="fd-btn fd-btn--ghost" onClick={refetch}><RefreshCw size={14}/> Refresh</button>
             <Link className="fd-btn fd-btn--ghost" to="/faculty/announcements">Post Announcement</Link>
             <Link className="fd-btn fd-btn--primary" to="/faculty/assignments">Manage Assignments</Link>
           </div>
@@ -164,10 +214,10 @@ export default function FacultyDashboard() {
         {/* Stat cards */}
         <div className="fd-stats">
           {[
-            { icon: BookOpen,  label:'My Classes',       value: facultyClasses.length,       sub:"Today's sessions",    color:'#4338ca', bg:'rgba(67,56,202,.2)'  },
-            { icon: Users,     label:'Total Students',   value: totalStudents,                sub:'Across all courses',  color:'#0ea5e9', bg:'rgba(14,165,233,.18)' },
-            { icon: FileText,  label:'Pending to Grade', value: pending,                      sub:'Submissions',         color:'#f59e0b', bg:'rgba(245,158,11,.18)' },
-            { icon: Megaphone, label:'Announcements',    value: facultyAnnouncements.length,  sub:'2 published',         color:'#7c3aed', bg:'rgba(124,58,237,.18)' },
+            { icon: BookOpen,  label: 'My Courses',        value: totalClasses,          sub: 'This semester',        color: '#4338ca', bg: 'rgba(67,56,202,.2)'   },
+            { icon: Users,     label: 'Announcements',     value: announcements.length,  sub: 'Published + drafts',   color: '#0ea5e9', bg: 'rgba(14,165,233,.18)' },
+            { icon: FileText,  label: 'Assignments',       value: assignments.length,    sub: 'Active this semester', color: '#f59e0b', bg: 'rgba(245,158,11,.18)' },
+            { icon: Megaphone, label: 'Upcoming Events',   value: upcoming,              sub: 'Next 30 days',         color: '#7c3aed', bg: 'rgba(124,58,237,.18)' },
           ].map(({ icon: Icon, label, value, sub, color, bg }) => (
             <div key={label} className="fd-stat">
               <div className="fd-stat-icon" style={{ background: bg }}><Icon size={20} color={color} /></div>
@@ -198,25 +248,28 @@ export default function FacultyDashboard() {
         {/* Row 1: Today's Classes + Attendance */}
         <div className="fd-grid">
 
-          {/* Today's Classes */}
+          {/* Today's Classes / Upcoming Bookings */}
           <div className="fd-card">
             <div className="fd-card-head">
-              <h2>Today's Classes</h2>
-              <Link className="fd-link" to="/faculty/timetable">Full Schedule <ArrowRight size={12} /></Link>
+              <h2>Upcoming Room Bookings</h2>
+              <Link className="fd-link" to="/faculty/rooms">Book Room <ArrowRight size={12}/></Link>
             </div>
-            {facultyClasses.map(c => (
-              <div key={c.id} className="fd-class-row">
-                <div style={{ display:'flex', gap:10, alignItems:'center', flex:1, minWidth:0 }}>
-                  <div className="fd-class-bar" style={{ background: c.status==='Completed'?'#34d399': c.status==='In progress'?'#818cf8':'rgba(255,255,255,.12)' }} />
-                  <div>
-                    <div className="fd-class-name">{c.subject}</div>
-                    <div className="fd-class-meta">{c.time} · {c.room}</div>
-                    {c.status !== 'Upcoming' && <div className="fd-class-meta">{c.present}/{c.enrolled} present</div>}
+            {bookings.length === 0
+              ? <p style={{ color:'#7880a8', fontSize:'.86rem' }}>No upcoming bookings. <Link to="/faculty/rooms" style={{ color:'#818cf8' }}>Book a room</Link></p>
+              : bookings.slice(0,4).map(b => (
+                <div key={b.id} className="fd-class-row">
+                  <div style={{ display:'flex', gap:10, alignItems:'center', flex:1, minWidth:0 }}>
+                    <div className="fd-class-bar" style={{ background:'#818cf8' }}/>
+                    <div>
+                      <div className="fd-class-name">{b.room_name ?? b.room_code}</div>
+                      <div className="fd-class-meta">{b.building} · {b.purpose}</div>
+                      <div className="fd-class-meta">{new Date(b.start_time).toLocaleString([],{dateStyle:'short',timeStyle:'short'})}</div>
+                    </div>
                   </div>
+                  <span className="fd-status fd-status--progress">Confirmed</span>
                 </div>
-                <span className={`fd-status fd-status--${c.status==='Completed'?'done':c.status==='In progress'?'progress':'upcoming'}`}>{c.status}</span>
-              </div>
-            ))}
+              ))
+            }
           </div>
 
           {/* Student Attendance */}
@@ -267,108 +320,56 @@ export default function FacultyDashboard() {
           </div>
         </div>
 
-        {/* Row 2: Assignments + My Students */}
+        {/* Row 2: Announcements */}
         <div className="fd-grid">
 
-          {/* Assignments */}
+          {/* Announcements */}
           <div className="fd-card">
             <div className="fd-card-head">
-              <h2>Assignments</h2>
-              <Link className="fd-link" to="/faculty/assignments">Manage <ArrowRight size={12} /></Link>
+              <h2>Recent Announcements</h2>
+              <Link className="fd-btn fd-btn--primary" to="/faculty/announcements" style={{ padding:'7px 14px', fontSize:'.82rem' }}>
+                <Plus size={14} /> New Announcement
+              </Link>
             </div>
-            {facultyAssignments.map(a => {
-              const pct     = Math.round((a.submitted / a.total) * 100);
-              const toGrade = a.submitted - a.graded;
-              return (
-                <div key={a.id} className="fd-asgn-row">
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div className="fd-asgn-title">{a.title}</div>
-                    <div className="fd-asgn-meta">{a.subject} · Due {a.due}</div>
-                    <div style={{ display:'flex', gap:12, marginTop:4 }}>
-                      <span style={{ fontSize:'.74rem', color:'#34d399' }}>{a.submitted}/{a.total} submitted</span>
-                      <span style={{ fontSize:'.74rem', color:'#818cf8' }}>{a.graded} graded</span>
+            {announcements.length === 0
+              ? <p style={{ color:'#7880a8', fontSize:'.86rem' }}>No announcements yet.</p>
+              : <div style={{ display:'grid', gap:10 }}>
+                {announcements.slice(0,5).map((a,i) => (
+                  <div key={a.id ?? i} style={{ background:'#0d1117', border:'1px solid rgba(255,255,255,.07)', borderRadius:10, padding:14 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                      <span className="fd-ann-badge fd-ann-published">{a.status ?? 'published'}</span>
+                      <span style={{ fontSize:'.72rem', color:'#555a7a' }}>{a.created_at ? new Date(a.created_at).toLocaleDateString() : ''}</span>
                     </div>
-                    <div className="fd-progress">
-                      <div className="fd-progress-fill" style={{ width:`${pct}%` }} />
-                    </div>
+                    <p style={{ margin:'0 0 4px', fontSize:'.87rem', fontWeight:600, color:'#eceefb' }}>{a.title}</p>
+                    <p style={{ margin:0, fontSize:'.74rem', color:'#7880a8' }}>{a.category}</p>
                   </div>
-                  {toGrade > 0
-                    ? <span className="fd-badge fd-badge--warn">{toGrade} to grade</span>
-                    : <span className="fd-badge fd-badge--ok">All graded</span>
-                  }
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            }
           </div>
 
-          {/* My Students */}
+          {/* My Students — now real */}
           <div className="fd-card">
             <div className="fd-card-head">
               <h2>My Students</h2>
-              <Link className="fd-link" to="/faculty/students">View All <ArrowRight size={12} /></Link>
+              <Link className="fd-link" to="/faculty/students">View All <ArrowRight size={12}/></Link>
             </div>
-            <table className="fd-table">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Attendance</th>
-                  <th>Grade</th>
-                </tr>
-              </thead>
-              <tbody>
-                {myStudents.map(s => (
-                  <tr key={s.id}>
-                    <td>
-                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                        <div className="fd-av">{initials(s.name)}</div>
-                        <div>
-                          <div style={{ fontSize:'.85rem', fontWeight:600, color:'#eceefb' }}>{s.name}</div>
-                          <div style={{ fontSize:'.72rem', color:'#7880a8' }}>{s.id}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <div className="fd-mini-bar">
-                          <div className="fd-mini-fill" style={{ width:`${s.attendance}%`, background:attColor(s.attendance) }} />
-                        </div>
-                        <span style={{ fontSize:'.8rem' }}>{s.attendance}%</span>
-                      </div>
-                    </td>
-                    <td><span className={gradeClass(s.grade)}>{s.grade}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <dl className="facts" style={{ margin: 0 }}>
+              <div><dt>Courses this semester</dt><dd style={{ color: '#818cf8' }}>{totalClasses}</dd></div>
+              <div><dt>Assignments active</dt><dd>{assignments.length}</dd></div>
+              <div><dt>Upcoming events</dt><dd>{upcoming}</dd></div>
+              <div><dt>Present (all classes)</dt><dd style={{ color: '#34d399' }}>{attendanceSummary.find(x=>x.name==='Present')?.value ?? 0}</dd></div>
+            </dl>
+            <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Link className="fd-btn fd-btn--ghost" to="/faculty/students" style={{ padding: '7px 14px', fontSize: '.82rem', textDecoration: 'none' }}>
+                <Users size={14}/> All Students
+              </Link>
+              <Link className="fd-btn fd-btn--ghost" to="/faculty/attendance" style={{ padding: '7px 14px', fontSize: '.82rem', textDecoration: 'none' }}>
+                <ClipboardList size={14}/> Take Attendance
+              </Link>
+            </div>
           </div>
-        </div>
 
-        {/* Announcements */}
-        <div className="fd-card">
-          <div className="fd-card-head">
-            <h2>My Announcements</h2>
-            <Link className="fd-btn fd-btn--primary" to="/faculty/announcements" style={{ padding:'7px 14px', fontSize:'.82rem' }}>
-              <Plus size={14} /> New Announcement
-            </Link>
-          </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:12 }}>
-            {facultyAnnouncements.map(a => (
-              <div key={a.id} style={{ background:'#0d1117', border:'1px solid rgba(255,255,255,.07)', borderRadius:10, padding:14 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-                  <span className={`fd-ann-badge fd-ann-${a.status}`}>{a.status}</span>
-                  <span style={{ fontSize:'.72rem', color:'#555a7a' }}>{a.date}</span>
-                </div>
-                <p style={{ margin:'0 0 4px', fontSize:'.87rem', fontWeight:600, color:'#eceefb' }}>{a.title}</p>
-                <p style={{ margin:0, fontSize:'.74rem', color:'#7880a8' }}>To: {a.audience}</p>
-              </div>
-            ))}
-            <Link to="/faculty/announcements" style={{ background:'transparent', border:'2px dashed rgba(255,255,255,.1)', borderRadius:10, padding:14, display:'grid', placeItems:'center', textDecoration:'none', color:'#7880a8', fontSize:'.85rem', minHeight:80, transition:'all .15s' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor='#818cf8'; e.currentTarget.style.color='#818cf8'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,.1)'; e.currentTarget.style.color='#7880a8'; }}
-            >
-              <div style={{ textAlign:'center' }}><div style={{ fontSize:'1.3rem', marginBottom:4 }}>+</div>Create announcement</div>
-            </Link>
-          </div>
         </div>
 
       </div>

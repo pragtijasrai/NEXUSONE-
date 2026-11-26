@@ -2,17 +2,17 @@ import { query } from '../config/db.js';
 
 const ALLOWED_SORT = new Set(['name', 'building', 'capacity', 'type', 'created_at']);
 
-export async function findAll({ type, building, search, page = 1, limit = 20, sortBy = 'name', sortDir = 'ASC' } = {}) {
+export async function findAll({ type, building, search, page = 1, limit = 20, sortBy = 'name', sortDir = 'ASC', includeInactive = false } = {}) {
   const params = [], where = [];
   const safeSort = ALLOWED_SORT.has(sortBy) ? sortBy : 'name';
   const safeDir  = sortDir.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
-  where.push(`is_active = true`);
-  if (type)     { params.push(type);                      where.push(`type = $${params.length}`); }
-  if (building) { params.push(`%${building.toLowerCase()}%`); where.push(`LOWER(building) LIKE $${params.length}`); }
-  if (search)   { params.push(`%${search.toLowerCase()}%`);   where.push(`(LOWER(name) LIKE $${params.length} OR LOWER(room_code) LIKE $${params.length})`); }
+  if (!includeInactive) where.push(`is_active = true`);
+  if (type)     { params.push(type);                           where.push(`type = $${params.length}`); }
+  if (building) { params.push(`%${building.toLowerCase()}%`);  where.push(`LOWER(building) LIKE $${params.length}`); }
+  if (search)   { params.push(`%${search.toLowerCase()}%`);    where.push(`(LOWER(name) LIKE $${params.length} OR LOWER(room_code) LIKE $${params.length})`); }
 
-  const whereClause = `WHERE ${where.join(' AND ')}`;
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const countRes = await query(`SELECT COUNT(*) FROM rooms ${whereClause}`, params);
   const total    = Number(countRes.rows[0].count);
 

@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarCheck, DoorOpen, Wrench, PackageSearch,
   CalendarDays, Bus, Bot, Megaphone, GraduationCap,
   BookOpen, ShieldCheck, ArrowRight, Sparkles,
-  CheckCircle, Zap, Star, Play,
+  CheckCircle, Zap, Star, Play, X,
 } from 'lucide-react';
 import Logo from '../../components/common/Logo.jsx';
 
@@ -62,6 +63,7 @@ function Stars({ n = 5 }) {
 }
 
 export default function Landing() {
+  const [showDemo, setShowDemo] = useState(false);
   return (
     <div className="landing">
 
@@ -113,7 +115,7 @@ export default function Landing() {
             <button
               className="btn btn--lg"
               style={{ background: 'rgba(255,255,255,.12)', color: '#fff', border: '1px solid rgba(255,255,255,.28)', backdropFilter: 'blur(8px)' }}
-              onClick={() => {}}
+              onClick={() => setShowDemo(true)}
             >
               <Play size={16} fill="#fff" /> Watch Demo
             </button>
@@ -294,8 +296,70 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Footer ── */}
-      <footer style={{ padding: '32px 5vw', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+      {/* ── Demo Modal ── */}
+      {showDemo && (
+        <div
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.78)', zIndex:9999, backdropFilter:'blur(6px)', display:'grid', placeItems:'center', padding:16 }}
+          onClick={e => e.target === e.currentTarget && setShowDemo(false)}
+        >
+          <div style={{ background:'#131628', border:'1px solid rgba(255,255,255,.12)', borderRadius:20, padding:'32px 36px', width:'min(640px,100%)', position:'relative', animation:'demoIn .25s cubic-bezier(.34,1.1,.64,1)' }}>
+            <style>{`@keyframes demoIn{from{opacity:0;transform:scale(.93) translateY(16px)}}`}</style>
+            <button
+              onClick={() => setShowDemo(false)}
+              aria-label="Close"
+              style={{ position:'absolute', top:16, right:16, background:'rgba(255,255,255,.08)', border:'1px solid rgba(255,255,255,.12)', borderRadius:'50%', width:34, height:34, display:'grid', placeItems:'center', cursor:'pointer', color:'#c5caf0' }}
+            >
+              <X size={16} />
+            </button>
+
+            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:24 }}>
+              <div style={{ width:48, height:48, borderRadius:14, background:'linear-gradient(135deg,#4338ca,#6366f1)', display:'grid', placeItems:'center' }}>
+                <Play size={22} fill="#fff" color="#fff" />
+              </div>
+              <div>
+                <h2 style={{ margin:0, fontSize:'1.3rem', fontWeight:800, color:'#eceefb' }}>NexusOne Platform Demo</h2>
+                <p style={{ margin:0, fontSize:'.85rem', color:'#7880a8' }}>Explore the campus management system in 2 minutes</p>
+              </div>
+            </div>
+
+            {/* Video placeholder */}
+            <div style={{ background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.08)', borderRadius:14, aspectRatio:'16/9', display:'grid', placeItems:'center', marginBottom:24, position:'relative', overflow:'hidden' }}>
+              <div style={{ position:'absolute', inset:0, background:'linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#1e3a8a 100%)', opacity:.6 }} />
+              <div style={{ position:'relative', textAlign:'center' }}>
+                <div style={{ width:64, height:64, borderRadius:'50%', background:'rgba(255,255,255,.18)', backdropFilter:'blur(8px)', display:'grid', placeItems:'center', margin:'0 auto 14px', border:'2px solid rgba(255,255,255,.3)' }}>
+                  <Play size={26} fill="#fff" color="#fff" />
+                </div>
+                <p style={{ color:'rgba(255,255,255,.7)', fontSize:'.88rem', margin:0 }}>Video demo coming soon</p>
+                <p style={{ color:'rgba(255,255,255,.45)', fontSize:'.78rem', margin:'4px 0 0' }}>Try the live platform instead →</p>
+              </div>
+            </div>
+
+            {/* quick-start role links */}
+            <p style={{ fontSize:'.82rem', color:'#7880a8', marginBottom:12 }}>Jump straight into a demo account:</p>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:10 }}>
+              {[
+                { role:'Student',     grad:'linear-gradient(135deg,#4338ca,#6366f1)', to:'/login' },
+                { role:'Faculty',     grad:'linear-gradient(135deg,#0ea5e9,#22d3ee)', to:'/login' },
+                { role:'Admin',       grad:'linear-gradient(135deg,#7c3aed,#a78bfa)', to:'/login' },
+                { role:'Maintenance', grad:'linear-gradient(135deg,#f59e0b,#fbbf24)', to:'/login' },
+              ].map(({ role, grad, to }) => (
+                <Link
+                  key={role}
+                  to={to}
+                  onClick={() => setShowDemo(false)}
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 14px', borderRadius:10, background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.08)', color:'#eceefb', textDecoration:'none', fontSize:'.86rem', fontWeight:600, transition:'all .18s' }}
+                >
+                  <div style={{ width:28, height:28, borderRadius:8, background:grad, flexShrink:0 }} />
+                  {role} Portal
+                  <ArrowRight size={13} style={{ marginLeft:'auto', color:'#7880a8' }} />
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Footer ── */}      <footer style={{ padding: '32px 5vw', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
           <Logo showTagline />
           <div style={{ display: 'flex', gap: 24 }}>

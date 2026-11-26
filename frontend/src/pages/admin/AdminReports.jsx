@@ -1,49 +1,56 @@
-import { Download } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  LineChart, Line,
+  PieChart, Pie, Cell,
 } from 'recharts';
+import { useApi } from '../../hooks/useApi.js';
+import { LoadingSpinner, ErrorState } from '../../components/common/ApiStates.jsx';
+import { getAdminDashboard } from '../../services/dashboardService.js';
 import AdminShell from './AdminShell.jsx';
-
-const roomUsage = [
-  { week:'Week 1', usage:65 }, { week:'Week 2', usage:78 },
-  { week:'Week 3', usage:82 }, { week:'Week 4', usage:71 },
-];
-
-const bookingTrends = [
-  { week:'Week 1', approved:45, pending:12 },
-  { week:'Week 2', approved:58, pending:8  },
-  { week:'Week 3', approved:72, pending:15 },
-  { week:'Week 4', approved:61, pending:10 },
-];
-
-const topRooms = [
-  { id:'R-203', usage:'82%' }, { id:'R-101', usage:'78%' },
-  { id:'Lab-1', usage:'54%' }, { id:'B-155', usage:'49%' },
-];
-
-const bookingTrendTable = [
-  { label:'Total Bookings', val:196, change:'+8%' },
-  { label:'Approved',       val:170, change:'+6%' },
-  { label:'Rejected',       val:26,  change:'-2%' },
-];
-
-const courseAttendance = [
-  { code:'CS-201', pct:'87%' }, { code:'CS-301', pct:'82%' },
-  { code:'CS-305', pct:'91%' }, { code:'CS-401', pct:'79%' },
-];
 
 function DarkTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
     <div style={{ background:'#1e2440', border:'1px solid rgba(255,255,255,.12)', borderRadius:8, padding:'8px 14px', fontSize:'.8rem', color:'#c5caf0' }}>
       <strong>{label}</strong>
-      {payload.map((p,i)=><div key={i} style={{ color:p.color }}>{p.name}: {p.value}</div>)}
+      {payload.map((p,i)=><div key={i} style={{ color:p.fill||p.color||'#818cf8' }}>{p.name||'Count'}: {p.value}</div>)}
     </div>
   );
 }
 
+const ROLE_COLORS = { student:'#4338ca', faculty:'#0ea5e9', admin:'#7c3aed', maintenance:'#f59e0b' };
+const STATUS_COLORS = ['#fbbf24','#818cf8','#34d399','#f87171'];
+
 export default function AdminReports() {
+  const { data, loading, error, refetch } = useApi(getAdminDashboard);
+
+  if (loading) return <AdminShell><LoadingSpinner message="Loading reports…" /></AdminShell>;
+  if (error)   return <AdminShell><ErrorState error={error} onRetry={refetch} /></AdminShell>;
+
+  const d = data ?? {};
+  const stats        = d.stats ?? {};
+  const usersByRole  = d.usersByRole ?? [];
+  const roomUtil     = d.roomUtilByDay ?? [];
+  const recentUsers  = d.recentUsers ?? [];
+  const tickets      = d.urgentTickets ?? [];
+
+  /* Build chart data from live DB */
+  const userDist = usersByRole.map((r, i) => ({
+    name: r.role, value: Number(r.count),
+    color: ROLE_COLORS[r.role] ?? '#818cf8',
+  }));
+
+  const roomBarData = roomUtil.length > 0
+    ? roomUtil.map(r => ({ day: r.day, bookings: Number(r.bookings) }))
+    : [{ day:'No data', bookings:0 }];
+
+  const statusData = [
+    { name:'Open tickets',    value: Number(stats.open_tickets ?? 0),    color:'#f87171' },
+    { name:'Total rooms',     value: Number(stats.total_rooms ?? 0),     color:'#818cf8' },
+    { name:'Upcoming events', value: Number(stats.upcoming_events ?? 0), color:'#34d399' },
+    { name:'Total users',     value: Number(stats.total_users ?? 0),     color:'#fbbf24' },
+  ];
+
   return (
     <AdminShell>
       <div className="ap-hdr">
@@ -52,86 +59,104 @@ export default function AdminReports() {
           <p className="ap-sub">View analytics and generate reports</p>
         </div>
         <div style={{ display:'flex', gap:10 }}>
-          <select className="ap-select">
-            <option>Room Usage</option><option>Attendance</option><option>Bookings</option>
-          </select>
-          <select className="ap-select">
-            <option>This Month</option><option>Last Month</option><option>This Year</option>
-          </select>
-          <button className="ap-btn ap-btn-primary">Generate Report</button>
+          <button className="ap-btn ap-btn-ghost ap-btn-sm" onClick={refetch}><RefreshCw size={13}/> Refresh</button>
+          <button className="ap-btn ap-btn-primary"><Download size={15}/> Export</button>
         </div>
       </div>
 
-      {/* Room Usage chart */}
-      <div className="ap-card" style={{ marginBottom:16 }}>
-        <div className="ap-card-hdr">
-          <h2>Room Usage Statistics</h2>
-          <span className="ap-badge ap-badge-blue">Weekly</span>
-        </div>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={roomUsage} margin={{ top:4, right:4, left:-24, bottom:0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" vertical={false} />
-            <XAxis dataKey="week" tick={{ fontSize:11, fill:'#7880a8' }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize:11, fill:'#7880a8' }} axisLine={false} tickLine={false} />
-            <Tooltip content={<DarkTooltip />} />
-            <Bar dataKey="usage" fill="#4338ca" radius={[4,4,0,0]} name="Usage %" />
-          </BarChart>
-        </ResponsiveContainer>
+      {/* Summary stats */}
+      <div className="ap-g4" style={{ marginBottom:18 }}>
+        {[
+          { label:'Total Users',     val: Number(stats.total_users ?? 0),    color:'#818cf8', bg:'rgba(99,102,241,.15)'  },
+          { label:'Total Rooms',     val: Number(stats.total_rooms ?? 0),    color:'#22d3ee', bg:'rgba(34,211,238,.15)'  },
+          { label:'Open Tickets',    val: Number(stats.open_tickets ?? 0),   color:'#f87171', bg:'rgba(248,113,113,.15)' },
+          { label:'Upcoming Events', val: Number(stats.upcoming_events ?? 0),color:'#34d399', bg:'rgba(52,211,153,.15)'  },
+        ].map(c=>(
+          <div key={c.label} className="ap-card" style={{ display:'flex', alignItems:'center', gap:14 }}>
+            <div style={{ width:40, height:40, borderRadius:10, background:c.bg, display:'grid', placeItems:'center', fontSize:'1.1rem', fontWeight:700, color:c.color }}>{c.val}</div>
+            <span style={{ fontSize:'.84rem', color:'#7880a8' }}>{c.label}</span>
+          </div>
+        ))}
       </div>
 
-      {/* Three summary cards */}
-      <div className="ap-g3" style={{ marginBottom:16 }}>
+      {/* Charts row */}
+      <div className="ap-g2" style={{ marginBottom:16 }}>
 
-        {/* Most Used Rooms */}
+        {/* Room usage by day (live) */}
         <div className="ap-card">
-          <h2 style={{ marginBottom:14 }}>Most Used Rooms</h2>
-          {topRooms.map((r,i)=>(
-            <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <span style={{ fontSize:'.78rem', color:'#7880a8', width:16 }}>{i+1}.</span>
-                <span className="ap-badge ap-badge-blue" style={{ fontSize:'.76rem' }}>{r.id}</span>
-              </div>
-              <span style={{ fontSize:'.84rem', color:'#34d399', fontWeight:600 }}>{r.usage}</span>
-            </div>
-          ))}
+          <div className="ap-card-hdr">
+            <h2>Room Bookings (Last 7 days)</h2>
+            <span className="ap-badge ap-badge-blue">Live</span>
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={roomBarData} margin={{ top:4, right:4, left:-24, bottom:0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" vertical={false} />
+              <XAxis dataKey="day" tick={{ fontSize:11, fill:'#7880a8' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize:11, fill:'#7880a8' }} axisLine={false} tickLine={false} />
+              <Tooltip content={<DarkTooltip />} />
+              <Bar dataKey="bookings" fill="#4338ca" radius={[4,4,0,0]} name="Bookings" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
 
-        {/* Booking Trends */}
+        {/* User distribution (live) */}
         <div className="ap-card">
-          <h2 style={{ marginBottom:14 }}>Booking Trends</h2>
-          {bookingTrendTable.map((b,i)=>(
-            <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
-              <span style={{ fontSize:'.84rem', color:'#7880a8' }}>{b.label}</span>
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ fontSize:'.9rem', color:'#eceefb', fontWeight:600 }}>{b.val}</span>
-                <span style={{ fontSize:'.74rem', color:b.change.startsWith('+')?'#34d399':'#f87171' }}>{b.change}</span>
-              </div>
+          <div className="ap-card-hdr"><h2>User Distribution</h2><span className="ap-badge ap-badge-blue">Live</span></div>
+          <div style={{ display:'grid', gridTemplateColumns:'160px 1fr', gap:16, alignItems:'center' }}>
+            <ResponsiveContainer width={160} height={160}>
+              <PieChart>
+                <Pie data={userDist} cx="50%" cy="50%" innerRadius={45} outerRadius={72} dataKey="value" strokeWidth={0}>
+                  {userDist.map((d,i)=><Cell key={i} fill={d.color}/>)}
+                </Pie>
+                <Tooltip content={<DarkTooltip/>}/>
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{ display:'grid', gap:10 }}>
+              {userDist.map(d=>(
+                <div key={d.name} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <div style={{ width:10, height:10, borderRadius:3, background:d.color, flexShrink:0 }}/>
+                  <span style={{ fontSize:'.84rem', color:'#7880a8', flex:1, textTransform:'capitalize' }}>{d.name}</span>
+                  <span style={{ fontSize:'.9rem', fontWeight:700, color:'#e2e8f0' }}>{d.value}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-
-        {/* Course Attendance */}
-        <div className="ap-card">
-          <h2 style={{ marginBottom:14 }}>Course Attendance</h2>
-          {courseAttendance.map((c,i)=>(
-            <div key={i} style={{ padding:'7px 0', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                <span className="ap-badge ap-badge-blue" style={{ fontSize:'.74rem' }}>{c.code}</span>
-                <span style={{ fontSize:'.84rem', color:'#34d399', fontWeight:600 }}>{c.pct}</span>
-              </div>
-              <div className="ap-progress">
-                <div className="ap-progress-fill" style={{ width:c.pct, background:'#4338ca' }} />
-              </div>
-            </div>
-          ))}
+          </div>
         </div>
       </div>
 
-      {/* Download */}
-      <div style={{ display:'flex', justifyContent:'flex-end' }}>
-        <button className="ap-btn ap-btn-primary">
-          <Download size={15} /> Download Report (PDF)
-        </button>
+      {/* Recent users + urgent tickets */}
+      <div className="ap-g2" style={{ marginBottom:16 }}>
+        <div className="ap-card">
+          <h2 style={{ marginBottom:14 }}>Recent Users</h2>
+          {recentUsers.length === 0
+            ? <p style={{ color:'#7880a8', fontSize:'.86rem' }}>No users yet.</p>
+            : recentUsers.slice(0,6).map((u,i)=>(
+              <div key={u.id ?? i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
+                <div>
+                  <div style={{ fontSize:'.86rem', color:'#eceefb', fontWeight:500 }}>{u.name}</div>
+                  <div style={{ fontSize:'.76rem', color:'#7880a8' }}>{u.email}</div>
+                </div>
+                <span className={`ap-badge ${u.role==='student'?'ap-badge-blue':u.role==='faculty'?'ap-badge-cyan':u.role==='admin'?'ap-badge-yellow':'ap-badge-green'}`}>{u.role}</span>
+              </div>
+            ))
+          }
+        </div>
+
+        <div className="ap-card">
+          <h2 style={{ marginBottom:14 }}>Urgent Tickets</h2>
+          {tickets.length === 0
+            ? <p style={{ color:'#7880a8', fontSize:'.86rem' }}>No urgent tickets.</p>
+            : tickets.map((t,i)=>(
+              <div key={t.id ?? i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
+                <div>
+                  <div style={{ fontSize:'.86rem', color:'#eceefb', fontWeight:500 }}>{t.issue ?? t.title}</div>
+                  <div style={{ fontSize:'.76rem', color:'#7880a8' }}>{t.location}</div>
+                </div>
+                <span className="ap-badge ap-badge-red">{t.priority}</span>
+              </div>
+            ))
+          }
+        </div>
       </div>
     </AdminShell>
   );

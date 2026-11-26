@@ -1,11 +1,52 @@
 import * as bookings from '../models/bookingModel.js';
 import * as rooms from '../models/roomModel.js';
+import { query } from '../config/db.js';
 import { AppError, asyncHandler } from '../utils/AppError.js';
 
 export const myBookings = asyncHandler(async (req, res) => {
   const { page, limit, status } = req.query;
   const result = await bookings.findByUser(req.user.sub, { page: Number(page)||1, limit: Number(limit)||20, status });
   res.json({ success: true, message: 'Bookings retrieved', data: result });
+});
+
+/* Admin: list all bookings with optional status filter */
+export const allBookings = asyncHandler(async (req, res) => {
+  const { status, page, limit, search } = req.query;
+  const params = [], where = [];
+
+  if (status)  { params.push(status); where.push(`rb.status = $${params.length}`); }
+  if (search)  {
+    params.push(`%${search.toLowerCase()}%`);
+    where.push(`(LOWER(r.name) LIKE $${params.length} OR LOWER(u.name) LIKE $${params.length} OR LOWER(rb.purpose) LIKE $${params.length})`);
+  }
+
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const countRes = await query(
+    `SELECT COUNT(*) FROM room_bookings rb
+     JOIN rooms r ON r.id = rb.room_id
+     JOIN users u ON u.id = rb.user_id
+     ${whereClause}`, params);
+  const total = Number(countRes.rows[0].count);
+  const p = Number(page) || 1;
+  const l = Math.min(Number(limit) || 20, 100);
+  const offset = (p - 1) * l;
+  params.push(l, offset);
+
+  const { rows } = await query(
+    `SELECT rb.id, rb.start_time, rb.end_time, rb.purpose, rb.status, rb.created_at,
+            r.name AS room_name, r.room_code, r.building,
+            u.name AS user_name, u.email AS user_email, u.role AS user_role
+     FROM room_bookings rb
+     JOIN rooms r ON r.id = rb.room_id
+     JOIN users u ON u.id = rb.user_id
+     ${whereClause}
+     ORDER BY rb.created_at DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
+  );
+
+  res.json({ success: true, message: 'All bookings retrieved', data: { rows, total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
 });
 
 export const create = asyncHandler(async (req, res) => {
@@ -29,6 +70,18 @@ export const create = asyncHandler(async (req, res) => {
     if (e.code === '23P01') throw new AppError(409, 'This room is already booked for that time slot', 'BOOKING_CONFLICT');
     throw e;
   }
+
+  /* Fire-and-forget: socket emit + DB notification (non-fatal) */
+  import('../sockets/notify.js').then(({ createNotificationAndEmit, emitBookingConfirmed }) => {
+    emitBookingConfirmed({ userId: req.user.sub, bookingId: booking.id, roomName: room.name, startTime: start_time });
+    return createNotificationAndEmit({
+      userId: req.user.sub,
+      title:  'Room booking confirmed',
+      body:   `Your booking for ${room.name} has been confirmed.`,
+      type:   'success',
+    });
+  }).catch(() => {/* non-fatal */});
+
   res.status(201).json({ success: true, message: 'Room booked successfully', data: { booking } });
 });
 

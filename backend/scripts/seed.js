@@ -12,10 +12,10 @@
  * passwords in the database.
  *
  * Demo credentials (development only — NOT for production):
- *   student@northbridge.edu     / demo1234
- *   priya.raman@northbridge.edu / demo1234
- *   jordan.ellis@northbridge.edu / demo1234
- *   sam.okafor@northbridge.edu  / demo1234
+ *   alex.morgan@chitkara.edu.in     / demo1234
+ *   priya.raman@chitkara.edu.in     / demo1234
+ *   jordan.ellis@chitkara.edu.in    / demo1234
+ *   sam.okafor@chitkara.edu.in       / demo1234
  *
  * Syllabus: PostgreSQL seed data (Syllabus E)
  */
@@ -52,28 +52,28 @@ async function seed() {
   }
 
   /* ── Role profiles ── */
-  const alex    = (await query("SELECT id FROM users WHERE email = 'alex.morgan@northbridge.edu'")).rows[0];
-  const priya   = (await query("SELECT id FROM users WHERE email = 'priya.raman@northbridge.edu'")).rows[0];
-  const jordan  = (await query("SELECT id FROM users WHERE email = 'jordan.ellis@northbridge.edu'")).rows[0];
-  const sam     = (await query("SELECT id FROM users WHERE email = 'sam.okafor@northbridge.edu'")).rows[0];
+  const alex    = (await query("SELECT id FROM users WHERE email = 'alex.morgan@chitkara.edu.in'")).rows[0];
+  const priya   = (await query("SELECT id FROM users WHERE email = 'priya.raman@chitkara.edu.in'")).rows[0];
+  const jordan  = (await query("SELECT id FROM users WHERE email = 'jordan.ellis@chitkara.edu.in'")).rows[0];
+  const sam     = (await query("SELECT id FROM users WHERE email = 'sam.okafor@chitkara.edu.in'")).rows[0];
 
   await query(
     `INSERT INTO students (user_id, roll_number, semester, enrollment_year)
-     VALUES ($1, 'NB-S-1042', 5, 2024)
+     VALUES ($1, 'CU-S-1042', 5, 2023)
      ON CONFLICT (user_id) DO NOTHING`,
     [alex.id],
   );
 
   await query(
     `INSERT INTO faculty (user_id, employee_id, designation)
-     VALUES ($1, 'NB-F-2201', 'Associate Professor')
+     VALUES ($1, 'CU-F-2201', 'Associate Professor')
      ON CONFLICT (user_id) DO NOTHING`,
     [priya.id],
   );
 
   await query(
     `INSERT INTO maintenance_staff (user_id, employee_id, specialization)
-     VALUES ($1, 'NB-M-4110', 'Electrical & HVAC')
+     VALUES ($1, 'CU-M-4110', 'Electrical & HVAC')
      ON CONFLICT (user_id) DO NOTHING`,
     [sam.id],
   );
@@ -154,7 +154,7 @@ async function seed() {
   }
 
   logger.info('Seed data inserted successfully.');
-  logger.info('Demo login: email = <role>@northbridge.edu, password = demo1234');
+  logger.info('Demo login: email = <name>@chitkara.edu.in, password = demo1234');
   await pool.end();
 }
 
